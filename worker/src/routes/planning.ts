@@ -561,12 +561,9 @@ planning.get('/projects/:id/gantt', requireAuth, async (c) => {
     LEFT JOIN teams t ON t.id = l.team_id
     WHERE l.project_id = ?`
 
-  if (user.role === 'subcontractor') {
-    lotsQuery += ` AND l.subcontractor_id = '${user.sub}'`
-  }
-  lotsQuery += ' ORDER BY l.sort_order'
-
-  const lotsRes = await c.env.DB.prepare(lotsQuery).bind(id).all()
+  const lotsRes = user.role === 'subcontractor'
+    ? await c.env.DB.prepare(lotsQuery + ' AND l.subcontractor_id = ? ORDER BY l.sort_order').bind(id, user.sub).all()
+    : await c.env.DB.prepare(lotsQuery + ' ORDER BY l.sort_order').bind(id).all()
   const depsRes = await c.env.DB.prepare('SELECT * FROM dependencies WHERE project_id = ?').bind(id).all()
 
   return c.json({
