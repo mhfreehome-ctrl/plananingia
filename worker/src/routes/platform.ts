@@ -315,7 +315,7 @@ platform.post('/companies/:id/invite', requireSuperAdmin, async (c) => {
     })
   )
 
-  return c.json({ ok: true, user_id: userId, invite_token: inviteToken })
+  return c.json({ ok: true, user_id: userId })
 })
 
 // PUT /api/platform/companies/:id/block — bloquer/débloquer tous les users d'une société
