@@ -24,6 +24,7 @@ import SubLots from './pages/Subcontractor/MyLots'
 import SubPlanning from './pages/Subcontractor/Planning'
 import Platform from './pages/Platform'
 import Aide from './pages/Aide'
+import Docs from './pages/Docs'
 
 function RequireAuth({ children, role }: { children: React.ReactNode; role?: 'admin' | 'subcontractor' }) {
   const { user, loading } = useAuth()
@@ -63,6 +64,7 @@ export default function App() {
           <Route path="company" element={<Company />} />
           <Route path="platform" element={<Platform />} />
           <Route path="aide" element={<Aide />} />
+          <Route path="docs" element={<Docs />} />
         </Route>
 
         {/* Subcontractor routes */}
@@ -72,6 +74,7 @@ export default function App() {
           <Route path="planning" element={<SubPlanning />} />
           <Route path="notifications" element={<Notifications />} />
           <Route path="aide" element={<Aide />} />
+          <Route path="docs" element={<Docs />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />

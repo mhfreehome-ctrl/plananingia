@@ -593,10 +593,29 @@ export default function ProjectDetail() {
                     </td>
                     <td className="text-right">
                       <div className="flex gap-1 justify-end">
-                        <button onClick={() => setProgressLot(l)} className="btn btn-ghost btn-sm text-xs" title="Avancement">📊</button>
+                        <button onClick={() => setProgressLot(l)} className="btn btn-ghost btn-sm p-1" title="Avancement">
+                          <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none">
+                            <rect width="24" height="24" rx="5" fill="#22c55e"/>
+                            <circle cx="8.5" cy="8.5" r="2.5" fill="white"/>
+                            <circle cx="15.5" cy="15.5" r="2.5" fill="white"/>
+                            <path d="M18 6L6 18" stroke="white" strokeWidth="2.5" strokeLinecap="round"/>
+                          </svg>
+                        </button>
                         <button onClick={() => setTaskModal({ lotId: l.id, lotName: l.name })}
-                          className="btn btn-ghost btn-sm text-xs" title="Sous-tâches">
-                          📋{(lotTasksMap[l.id]?.length || 0) > 0 ? ` ${lotTasksMap[l.id].length}` : ''}
+                          className="btn btn-ghost btn-sm p-1 flex items-center gap-0.5" title="Sous-tâches">
+                          <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none">
+                            <rect x="8" y="2" width="8" height="7" rx="1.5" stroke="#7c3aed" strokeWidth="1.8"/>
+                            <path d="M12 4.5v2l1.2 1" stroke="#7c3aed" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                            <line x1="12" y1="9" x2="12" y2="13" stroke="#7c3aed" strokeWidth="1.8" strokeLinecap="round"/>
+                            <line x1="5" y1="13" x2="19" y2="13" stroke="#7c3aed" strokeWidth="1.8" strokeLinecap="round"/>
+                            <line x1="5" y1="13" x2="5" y2="16" stroke="#7c3aed" strokeWidth="1.8" strokeLinecap="round"/>
+                            <line x1="12" y1="13" x2="12" y2="16" stroke="#7c3aed" strokeWidth="1.8" strokeLinecap="round"/>
+                            <line x1="19" y1="13" x2="19" y2="16" stroke="#7c3aed" strokeWidth="1.8" strokeLinecap="round"/>
+                            <rect x="2" y="16" width="6" height="5" rx="1" stroke="#7c3aed" strokeWidth="1.8"/>
+                            <rect x="9" y="16" width="6" height="5" rx="1" stroke="#7c3aed" strokeWidth="1.8"/>
+                            <rect x="16" y="16" width="6" height="5" rx="1" stroke="#7c3aed" strokeWidth="1.8"/>
+                          </svg>
+                          {(lotTasksMap[l.id]?.length || 0) > 0 && <span className="text-xs text-purple-700">{lotTasksMap[l.id].length}</span>}
                         </button>
                         {!l.parent_lot_id && (
                           <button onClick={() => setSplitModal({ lot: l })}

@@ -186,6 +186,83 @@ function MockupInvite() {
   )
 }
 
+// Mockup : train de travaux
+function MockupTrainDeTravaux() {
+  const zones = ['RDC', 'R+1', 'R+2']
+  const lots = [
+    { code: 'IT10', dur: '15j' },
+    { code: 'EN20', dur: '10j' },
+    { code: 'BA30', dur: '12j' },
+  ]
+  return (
+    <div className="text-[10px] space-y-2">
+      <div className="bg-indigo-50 border border-indigo-200 rounded p-2">
+        <div className="font-semibold text-indigo-800 mb-2">🚂 Résultat : 3 lots × 3 zones = 9 sous-lots</div>
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse">
+            <thead>
+              <tr>
+                <th className="text-left px-1.5 py-1 text-gray-500">Lot parent</th>
+                {zones.map(z => <th key={z} className="px-1.5 py-1 bg-indigo-100 text-indigo-700 text-center rounded">{z}</th>)}
+              </tr>
+            </thead>
+            <tbody>
+              {lots.map(l => (
+                <tr key={l.code}>
+                  <td className="px-1.5 py-1 font-semibold text-gray-700">{l.code} ({l.dur})</td>
+                  {zones.map(z => (
+                    <td key={z} className="px-1.5 py-1 text-center">
+                      <span className="bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">{l.code}-{z}</span>
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="text-indigo-600 mt-1.5 flex items-center gap-1">
+          <span>→</span><span>Sous-lots chaînés automatiquement (FS)</span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Mockup : dépendances
+function MockupDependances() {
+  return (
+    <div className="text-[10px] space-y-1.5">
+      {[
+        { from: 'L01 Gros Œuvre', to: 'L02 Charpente', type: 'FS', lag: '0j', color: 'text-red-600' },
+        { from: 'L02 Charpente', to: 'L03 Couverture', type: 'FS', lag: '+2j', color: 'text-red-600' },
+        { from: 'L03 Couverture', to: 'L04 Plâtrerie', type: 'FS', lag: '0j', color: 'text-gray-500' },
+      ].map((dep, i) => (
+        <div key={i} className="flex items-center gap-2 bg-white border border-gray-200 rounded px-2 py-1.5">
+          <span className="font-semibold text-gray-700 flex-1 truncate">{dep.from}</span>
+          <span className={`font-bold text-xs ${dep.color}`}>→ {dep.type} {dep.lag}</span>
+          <span className="font-semibold text-gray-700 flex-1 truncate text-right">{dep.to}</span>
+        </div>
+      ))}
+      <div className="text-gray-400 text-[9px] mt-1">FS = Fin-à-Début · Les lots rouges sont sur le chemin critique</div>
+    </div>
+  )
+}
+
+// Mockup : export PDF
+function MockupExportPDF() {
+  return (
+    <div className="bg-white border border-gray-200 rounded-lg p-3 text-xs space-y-2">
+      <div className="font-semibold text-gray-800 text-[11px]">Exporter le planning</div>
+      <div className="flex gap-2">
+        {['A4 Portrait', 'A4 Paysage', 'A3 Paysage'].map(f => (
+          <div key={f} className={`border rounded px-2 py-1 text-[10px] ${f === 'A4 Paysage' ? 'bg-indigo-600 text-white border-indigo-600' : 'border-gray-300 text-gray-500'}`}>{f}</div>
+        ))}
+      </div>
+      <div className="bg-indigo-600 text-white text-center py-1.5 rounded text-[10px] font-medium">📥 Télécharger le PDF</div>
+    </div>
+  )
+}
+
 // Mockup : vue salarié
 function MockupSubView() {
   return (
@@ -343,6 +420,71 @@ const WORKFLOWS_ADMIN: Workflow[] = [
       },
     ]
   },
+  {
+    id: 'lots-advanced',
+    icon: '🏗️',
+    title: 'Lots avancés : sous-tâches, sous-lots & train de travaux',
+    steps: [
+      {
+        title: 'Sous-tâches : décomposer un lot en étapes',
+        desc: 'Dans la fiche d\'un lot, onglet "Tâches", créez des sous-tâches avec leur propre statut, date et assignation. Idéal pour un lot unique avec plusieurs phases (ex. : commande → livraison → pose → finitions).',
+        where: 'Chantier → Gantt → clic lot → Onglet Tâches → + Ajouter',
+        tip: 'Les sous-tâches restent rattachées au lot parent et n\'apparaissent pas comme des barres indépendantes sur le Gantt.',
+      },
+      {
+        title: 'Sous-lots par zones : découper un lot en plusieurs barres',
+        desc: 'Sur la fiche d\'un lot, cliquez sur "Découper en sous-lots". Définissez les zones (ex. : Bâtiment A, Bâtiment B) ou les niveaux (RDC, R+1…). Chaque sous-lot devient une barre indépendante sur le Gantt avec sa propre durée et assignation.',
+        where: 'Chantier → Gantt → clic lot → Découper en sous-lots',
+        tip: 'Utilisez les sous-lots quand le même corps de métier intervient sur plusieurs zones avec des horaires décalés.',
+      },
+      {
+        title: 'Train de travaux : répéter N lots sur M zones',
+        desc: 'Le train de travaux génère automatiquement une grille N×M de sous-lots. Depuis la fiche chantier, cliquez sur "🚂 Train de travaux", choisissez les lots à répéter et définissez les zones. L\'application crée tous les sous-lots et les chaîne en Fin→Début automatiquement.',
+        where: 'Chantier → Lots → 🚂 Train de travaux',
+        ui: <MockupTrainDeTravaux />,
+        tip: 'Après création, relancez le CPM (bouton "⚡ CPM") pour recalculer le chemin critique avec les nouveaux enchaînements.',
+      },
+      {
+        title: 'Dépendances entre lots',
+        desc: 'Sur la fiche d\'un lot, onglet "Dépendances", ajoutez les lots prédécesseurs avec le type de lien (FS = Fin-à-Début) et un délai optionnel. Le CPM recalcule ensuite les dates au plus tôt/tard et identifie le chemin critique.',
+        where: 'Chantier → Gantt → clic lot → Onglet Dépendances',
+        ui: <MockupDependances />,
+        tip: 'Les lots sur le chemin critique apparaissent en rouge sur le Gantt. Tout retard sur ces lots retarde la fin du chantier.',
+      },
+    ]
+  },
+  {
+    id: 'clients',
+    icon: '🏢',
+    title: 'Clients / Maîtres d\'ouvrage',
+    steps: [
+      {
+        title: 'Créer un client',
+        desc: 'Depuis le menu Clients, cliquez sur "+ Nouveau client". Renseignez le nom, l\'adresse, le contact et les éventuelles notes. Le client sera ensuite sélectionnable lors de la création d\'un chantier.',
+        where: 'Sidebar → Clients → + Nouveau client',
+      },
+      {
+        title: 'Associer un client à un chantier',
+        desc: 'Lors de la création ou de la modification d\'un chantier, sélectionnez le maître d\'ouvrage dans la liste déroulante "Client". La fiche client affiche ensuite tous les chantiers associés et leur avancement.',
+        where: 'Chantier → Modifier → Champ Client',
+        tip: 'La vue détail d\'un client permet de voir d\'un coup d\'œil tous les projets en cours ou terminés pour ce maître d\'ouvrage.',
+      },
+    ]
+  },
+  {
+    id: 'export',
+    icon: '📄',
+    title: 'Exporter le planning en PDF',
+    steps: [
+      {
+        title: 'Télécharger le Gantt en PDF',
+        desc: 'Depuis la fiche chantier, cliquez sur le bouton "📥 Exporter PDF". Choisissez le format (A4 Portrait, A4 Paysage ou A3 Paysage) selon la densité de votre planning. Le PDF généré capture le Gantt complet avec les couleurs et le chemin critique.',
+        where: 'Chantier → Onglet Planning → 📥 Exporter PDF',
+        ui: <MockupExportPDF />,
+        tip: 'Pour les chantiers avec beaucoup de lots, le format A3 Paysage offre la meilleure lisibilité. Le zoom est ajusté automatiquement pour tenir sur une page.',
+      },
+    ]
+  },
 ]
 
 const WORKFLOWS_EDITEUR: Workflow[] = [
@@ -421,6 +563,45 @@ const WORKFLOWS_EDITEUR: Workflow[] = [
         title: 'Planning global multi-chantiers',
         desc: 'La vue Planning global (sidebar) affiche tous les chantiers sur une même timeline. Très utile pour anticiper les pics de charge et les conflits de ressources.',
         where: 'Sidebar → Planning global',
+      },
+    ]
+  },
+  {
+    id: 'lots-advanced',
+    icon: '🏗️',
+    title: 'Sous-tâches, sous-lots & train de travaux',
+    steps: [
+      {
+        title: 'Sous-tâches : étapes internes d\'un lot',
+        desc: 'Dans la fiche lot, onglet "Tâches", créez des sous-tâches pour décomposer le travail en étapes (ex. : commande → livraison → pose → réception). Chaque sous-tâche a son propre statut et peut être assignée individuellement.',
+        where: 'Chantier → clic lot → Onglet Tâches → + Ajouter',
+      },
+      {
+        title: 'Train de travaux : lots répétés par zones',
+        desc: 'Le bouton "🚂 Train de travaux" (fiche chantier) crée automatiquement une grille de sous-lots en croisant les lots sélectionnés avec les zones définies (niveaux, bâtiments…). Les enchaînements Fin→Début sont créés automatiquement.',
+        where: 'Chantier → Lots → 🚂 Train de travaux',
+        ui: <MockupTrainDeTravaux />,
+        tip: 'Relancez le CPM après toute modification structurelle du planning pour recalculer le chemin critique.',
+      },
+      {
+        title: 'Dépendances entre lots',
+        desc: 'Ajoutez des liens de dépendance (Fin→Début) entre les lots depuis l\'onglet "Dépendances" de la fiche lot. Le CPM recalcule ensuite les dates et met en rouge les lots critiques.',
+        where: 'Chantier → clic lot → Onglet Dépendances',
+        ui: <MockupDependances />,
+      },
+    ]
+  },
+  {
+    id: 'export',
+    icon: '📄',
+    title: 'Exporter le planning en PDF',
+    steps: [
+      {
+        title: 'Télécharger le Gantt en PDF',
+        desc: 'Cliquez sur "📥 Exporter PDF" depuis la fiche chantier. Choisissez le format (A4 ou A3, portrait ou paysage). Le PDF capture le Gantt complet avec les barres colorées et le chemin critique.',
+        where: 'Chantier → Onglet Planning → 📥 Exporter PDF',
+        ui: <MockupExportPDF />,
+        tip: 'L\'A3 paysage est recommandé pour les chantiers denses. La mise à l\'échelle est automatique.',
       },
     ]
   },
@@ -648,6 +829,10 @@ export default function Aide() {
           <p className="text-gray-500 text-sm mt-0.5">Guide pratique par profil utilisateur · Workflows étape par étape</p>
         </div>
         <div className="ml-auto flex gap-2 flex-shrink-0">
+          <button onClick={() => navigate('/docs')}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-primary-600 text-white rounded-lg text-sm hover:bg-primary-700 transition-colors">
+            📖 Documentation complète
+          </button>
           <button onClick={handlePrint}
             className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50 transition-colors">
             🖨️ Imprimer / PDF
@@ -720,6 +905,8 @@ export default function Aide() {
             { q: 'Je ne peux pas me connecter', a: 'Vérifiez votre email et mot de passe. Si vous avez oublié votre mot de passe, cliquez sur "Mot de passe oublié" sur la page de connexion, ou contactez votre administrateur pour un mot de passe temporaire.' },
             { q: 'Je ne vois pas certains menus', a: 'L\'affichage dépend de votre profil. Les salariés et conducteurs ont un accès limité. Contactez votre admin si vous pensez que des droits manquent.' },
             { q: 'Le planning généré par l\'IA ne correspond pas', a: 'Assurez-vous que les types de lots de votre entreprise sont bien configurés (Mon Entreprise). Vous pouvez régénérer le planning ou modifier manuellement les lots dans le Gantt.' },
+            { q: 'Le chemin critique n\'est pas à jour après mes modifications', a: 'Après toute modification structurelle (ajout de lots, de dépendances, train de travaux), relancez manuellement le calcul CPM via le bouton "⚡ CPM" dans la fiche chantier.' },
+            { q: 'Comment créer un train de travaux ?', a: 'Depuis la fiche chantier, onglet Lots, cliquez sur "🚂 Train de travaux". Sélectionnez les lots parents, définissez les zones (niveaux, bâtiments) et cliquez sur "Créer". Les sous-lots sont générés et chaînés automatiquement.' },
             { q: 'Je n\'ai pas reçu l\'email d\'invitation', a: 'Vérifiez vos spams. Si l\'email n\'est toujours pas là, demandez à votre administrateur de réinitialiser votre mot de passe depuis la liste des utilisateurs.' },
           ].map(item => (
             <details key={item.q} className="group">
@@ -734,7 +921,7 @@ export default function Aide() {
 
       {/* Pied de page */}
       <div className="text-center text-xs text-gray-400 py-4 border-t border-gray-100">
-        PlanningIA · Guide utilisateur v1.0 · planningia.com
+        PlanningIA · Guide utilisateur v1.1 · planningia.com
       </div>
 
       {/* Styles impression */}

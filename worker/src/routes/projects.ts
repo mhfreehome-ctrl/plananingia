@@ -18,27 +18,28 @@ projects.get('/', requireAuth, async (c) => {
             (SELECT COALESCE(ROUND(AVG(NULLIF(l.progress_percent, 0))), 0) FROM lots l WHERE l.project_id = p.id) as avg_progress,
           (SELECT COUNT(*) FROM projects sp WHERE sp.parent_project_id = p.id) as sub_projects_count
           FROM projects p LEFT JOIN users u ON u.id = p.created_by
-          WHERE p.company_id = ?
+          WHERE (p.company_id = ? OR p.company_id IS NULL)
           AND (
-            p.created_by = ?
+            p.company_id IS NULL
+            OR p.created_by = ?
             OR EXISTS (SELECT 1 FROM lots l WHERE l.project_id = p.id AND l.subcontractor_id = ?)
             OR EXISTS (
               SELECT 1 FROM lots l JOIN team_members tm ON tm.team_id = l.team_id
               WHERE l.project_id = p.id AND tm.user_id = ?
             )
           )
-          ORDER BY p.updated_at DESC
+          ORDER BY p.company_id IS NULL DESC, p.updated_at DESC
         `).bind(user.company_id, user.sub, user.sub, user.sub).all()
       } else {
-      // Admin / Editeur avec company_id : voir uniquement ses projets
+      // Admin / Editeur avec company_id : voir ses projets + modèles globaux (company_id IS NULL)
       rows = await c.env.DB.prepare(`
         SELECT p.*, u.first_name || ' ' || u.last_name as creator_name,
           (SELECT COUNT(*) FROM lots l WHERE l.project_id = p.id) as lot_count,
           (SELECT COALESCE(ROUND(AVG(NULLIF(l.progress_percent, 0))), 0) FROM lots l WHERE l.project_id = p.id) as avg_progress,
           (SELECT COUNT(*) FROM projects sp WHERE sp.parent_project_id = p.id) as sub_projects_count
         FROM projects p LEFT JOIN users u ON u.id = p.created_by
-        WHERE p.company_id = ?
-        ORDER BY p.updated_at DESC
+        WHERE (p.company_id = ? OR p.company_id IS NULL)
+        ORDER BY p.company_id IS NULL DESC, p.updated_at DESC
       `).bind(user.company_id).all()
       }
     } else {

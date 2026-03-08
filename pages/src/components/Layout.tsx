@@ -70,10 +70,18 @@ export default function Layout() {
       {/* Sidebar */}
       <aside className={`fixed inset-y-0 left-0 z-40 w-64 bg-primary-900 text-white transform transition-transform duration-200 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:relative lg:translate-x-0 lg:flex lg:flex-col`}>
         {/* Logo */}
-        <div className="flex items-center justify-between h-16 px-4 border-b border-primary-800">
-          <div>
-            <div className="font-bold text-lg leading-tight">PlanningIA</div>
-            <div className="text-xs text-primary-300">{t('app.tagline')}</div>
+        <div className="flex items-center justify-between h-20 px-4 border-b border-primary-800">
+          <div className="flex items-center gap-3">
+            <svg className="w-10 h-10 flex-shrink-0" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <rect width="40" height="40" rx="9" fill="#22c55e"/>
+              <circle cx="14" cy="14" r="5" fill="white"/>
+              <circle cx="26" cy="26" r="5" fill="white"/>
+              <path d="M31 9L9 31" stroke="white" strokeWidth="4" strokeLinecap="round"/>
+            </svg>
+            <div>
+              <div className="font-bold text-lg leading-tight">PlanningIA</div>
+              <div className="text-xs text-primary-300">{t('app.tagline')}</div>
+            </div>
           </div>
           <button className="lg:hidden text-primary-300 hover:text-white" onClick={() => setSidebarOpen(false)}><IconX /></button>
         </div>
@@ -96,8 +104,20 @@ export default function Layout() {
           </NavLink>
         </nav>
 
-        {/* Lien Aide (tous les utilisateurs) */}
-        <div className="px-3 pt-2">
+        {/* Lien Documentation + Aide (tous les utilisateurs) */}
+        <div className="px-3 pt-2 space-y-1">
+          <NavLink to={isAdmin ? '/docs' : '/sub/docs'}
+            className={({ isActive }) => `flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
+              isActive
+                ? 'bg-primary-700 text-white'
+                : 'text-primary-400 hover:bg-primary-700 hover:text-white'
+            }`}
+            onClick={() => setSidebarOpen(false)}>
+            <svg className="w-5 h-5 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-1 9H9V9h10v2zm-4 4H9v-2h6v2zm4-8H9V5h10v2z"/>
+            </svg>
+            <span>Documentation</span>
+          </NavLink>
           <NavLink to={isAdmin ? '/aide' : '/sub/aide'}
             className={({ isActive }) => `flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
               isActive
@@ -105,7 +125,9 @@ export default function Layout() {
                 : 'text-primary-400 hover:bg-primary-700 hover:text-white'
             }`}
             onClick={() => setSidebarOpen(false)}>
-            <span>❓</span>
+            <svg className="w-5 h-5 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17h-2v-2h2v2zm2.07-7.75l-.9.92C13.45 12.9 13 13.5 13 15h-2v-.5c0-1.1.45-2.1 1.17-2.83l1.24-1.26c.37-.36.59-.86.59-1.41 0-1.1-.9-2-2-2s-2 .9-2 2H8c0-2.21 1.79-4 4-4s4 1.79 4 4c0 .88-.36 1.68-.93 2.25z"/>
+            </svg>
             <span>{t('nav.help')}</span>
           </NavLink>
         </div>

@@ -136,6 +136,9 @@ export default function Users() {
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [bulkAccess, setBulkAccess] = useState('editeur')
+  const [bulkLang, setBulkLang] = useState('fr')
+  const [bulkResetting, setBulkResetting] = useState(false)
+  const [bulkResetResults, setBulkResetResults] = useState<{ user: any; password: string }[] | null>(null)
 
   const toggleSort = (col: string) => {
     if (sortKey === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
@@ -162,6 +165,36 @@ export default function Users() {
       load()
     } catch (e: any) { setMsg(e.message) }
     finally { setSaving(false) }
+  }
+
+  const handleBulkLang = async () => {
+    if (!selected.size) return
+    setSaving(true)
+    try {
+      await Promise.all([...selected].map(id => {
+        const u = users.find((x: any) => x.id === id)
+        return api.users.update(id, { ...u, lang: bulkLang })
+      }))
+      setSelected(new Set())
+      load()
+    } catch (e: any) { setMsg(e.message) }
+    finally { setSaving(false) }
+  }
+
+  const handleBulkResetPassword = async () => {
+    if (!selected.size) return
+    if (!confirm(`Réinitialiser le mot de passe de ${selected.size} utilisateur${selected.size > 1 ? 's' : ''} ?`)) return
+    setBulkResetting(true)
+    try {
+      const results = await Promise.all([...selected].map(async id => {
+        const u = users.find((x: any) => x.id === id)
+        const r = await api.users.resetPassword(id)
+        return { user: u, password: r.temp_password }
+      }))
+      setBulkResetResults(results)
+      setSelected(new Set())
+    } catch (e: any) { setMsg(e.message) }
+    finally { setBulkResetting(false) }
   }
 
   const load = () => api.users.list().then(setUsers).finally(() => setLoading(false))
@@ -289,12 +322,13 @@ export default function Users() {
 
       {/* Barre d'action groupée (visible quand sélection non vide) */}
       {isFullAdmin && selected.size > 0 && (
-        <div className="flex items-center gap-3 bg-primary-50 border border-primary-200 rounded-lg px-4 py-2">
+        <div className="flex flex-wrap items-center gap-3 bg-primary-50 border border-primary-200 rounded-lg px-4 py-2.5">
           <span className="text-sm font-semibold text-primary-800">
             {selected.size} utilisateur{selected.size > 1 ? 's' : ''} sélectionné{selected.size > 1 ? 's' : ''}
           </span>
           <div className="w-px h-4 bg-primary-300" />
-          <span className="text-sm text-primary-700">Appliquer les droits&nbsp;:</span>
+          {/* Droits */}
+          <span className="text-xs text-primary-700 font-medium">Droits&nbsp;:</span>
           <select className="input input-sm" value={bulkAccess} onChange={e => setBulkAccess(e.target.value)}>
             <option value="admin">🔑 Admin</option>
             <option value="editeur">✏️ Éditeur</option>
@@ -302,9 +336,24 @@ export default function Users() {
             <option value="salarie">👁 Salarié</option>
           </select>
           <button onClick={handleBulkUpdate} disabled={saving} className="btn btn-primary btn-sm">
-            {saving ? t('common.loading') : 'Appliquer'}
+            {saving ? '…' : 'Appliquer'}
           </button>
-          <button onClick={() => setSelected(new Set())} className="btn btn-ghost btn-sm text-xs text-gray-500">
+          <div className="w-px h-4 bg-primary-300" />
+          {/* Langue */}
+          <span className="text-xs text-primary-700 font-medium">Langue&nbsp;:</span>
+          <select className="input input-sm" value={bulkLang} onChange={e => setBulkLang(e.target.value)}>
+            <option value="fr">🇫🇷 Français</option>
+            <option value="tr">🇹🇷 Türkçe</option>
+          </select>
+          <button onClick={handleBulkLang} disabled={saving} className="btn btn-primary btn-sm">
+            {saving ? '…' : 'Appliquer'}
+          </button>
+          <div className="w-px h-4 bg-primary-300" />
+          {/* Reset MDP */}
+          <button onClick={handleBulkResetPassword} disabled={bulkResetting} className="btn btn-sm bg-amber-500 hover:bg-amber-600 text-white border-0">
+            {bulkResetting ? '…' : `🔑 Réinitialiser MDP`}
+          </button>
+          <button onClick={() => setSelected(new Set())} className="ml-auto btn btn-ghost btn-sm text-xs text-gray-500">
             Désélectionner tout
           </button>
         </div>
@@ -431,6 +480,52 @@ export default function Users() {
             </div>
             <div className="modal-footer">
               <button className="btn btn-primary" onClick={() => setResetResult(null)}>{t('common.close')}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modale bulk reset password */}
+      {bulkResetResults && (
+        <div className="modal-overlay" onClick={() => setBulkResetResults(null)}>
+          <div className="modal" style={{ maxWidth: 560 }} onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3 className="font-semibold">🔑 Mots de passe temporaires ({bulkResetResults.length})</h3>
+              <button onClick={() => setBulkResetResults(null)}>✕</button>
+            </div>
+            <div className="modal-body space-y-3">
+              <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2">
+                ⚠ Communiquez ces mots de passe aux utilisateurs. Ils devront les changer à la prochaine connexion.
+              </p>
+              <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                {bulkResetResults.map(({ user: u, password }) => (
+                  <div key={u.id} className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-semibold text-gray-800 truncate">{u.first_name} {u.last_name} <span className="font-normal text-gray-400">({u.email})</span></p>
+                      <code className="text-base font-mono font-bold text-gray-900 select-all">{password}</code>
+                    </div>
+                    <button
+                      className="btn btn-ghost btn-sm flex-shrink-0"
+                      onClick={() => navigator.clipboard.writeText(password)}
+                      title="Copier">
+                      📋
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <button
+                className="btn btn-ghost btn-sm text-xs w-full border border-gray-200"
+                onClick={() => {
+                  const text = bulkResetResults.map(({ user: u, password }) =>
+                    `${u.first_name} ${u.last_name} (${u.email}) : ${password}`
+                  ).join('\n')
+                  navigator.clipboard.writeText(text)
+                }}>
+                📋 Copier tout
+              </button>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-primary" onClick={() => setBulkResetResults(null)}>{t('common.close')}</button>
             </div>
           </div>
         </div>

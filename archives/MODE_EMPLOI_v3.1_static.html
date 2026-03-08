@@ -1,0 +1,1027 @@
+<!DOCTYPE html>
+<html lang="fr"><head><meta charset="utf-8">
+<title>Mode d'emploi PlanningIA v3.1</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Helvetica Neue', Arial, sans-serif; font-size: 10pt; line-height: 1.55; color: #1a1a1a; }
+@page { size: A4; margin: 18mm 18mm 20mm 20mm;
+        @bottom-right { content: counter(page); font-size: 8pt; color: #6b7280; } }
+h1 { font-size: 20pt; color: #1d4ed8; margin: 0 0 8pt 0; }
+h2 { font-size: 14pt; color: #1d4ed8; margin: 16pt 0 5pt 0;
+     border-bottom: 1.5pt solid #dbeafe; padding-bottom: 3pt; page-break-after: avoid; }
+h3 { font-size: 11.5pt; color: #1e40af; margin: 12pt 0 4pt 0; page-break-after: avoid; }
+h4 { font-size: 10.5pt; color: #374151; margin: 8pt 0 3pt 0; font-weight: 600; page-break-after: avoid; }
+p { margin: 0 0 5pt 0; }
+ul, ol { margin: 3pt 0 5pt 1.4em; padding: 0; }
+li { margin: 1.5pt 0; }
+a { color: #1d4ed8; text-decoration: underline; }
+blockquote { border-left: 3pt solid #60a5fa; background: #eff6ff; margin: 6pt 0;
+             padding: 5pt 10pt; color: #1e3a5f; }
+code { font-family: 'Courier New', monospace; font-size: 8.5pt;
+       background: #f3f4f6; padding: 1pt 3pt; border-radius: 2pt; }
+pre { background: #1e293b; color: #e2e8f0; padding: 8pt 10pt; border-radius: 3pt;
+      margin: 5pt 0; font-size: 7.5pt; white-space: pre-wrap; }
+pre code { background: none; color: inherit; padding: 0; }
+table { width: 100%; border-collapse: collapse; margin: 5pt 0; font-size: 9pt; }
+th { background: #1d4ed8; color: white; padding: 4pt 7pt; text-align: left; }
+td { padding: 3pt 7pt; border: 0.5pt solid #d1d5db; }
+tr:nth-child(even) td { background: #f9fafb; }
+img { max-width: 100%; display: block; margin: 6pt auto; }
+hr { border: none; border-top: 0.5pt solid #e5e7eb; margin: 10pt 0; }
+</style>
+</head><body><h1 id="mode-demploi--planningia">Mode d'emploi — PlanningIA</h1>
+<blockquote>
+<p><strong>Guide pratique complet</strong> · Coordination IA des chantiers BTP
+Application web : <a href="https://planningia.com">planningia.com</a>
+Dernière mise à jour : 8 mars 2026 — Version 3.1</p>
+</blockquote>
+<hr />
+<h2 id="table-des-matières">Table des matières</h2>
+<ol>
+<li><a href="#1-présentation-générale">Présentation générale</a></li>
+<li><a href="#2-connexion--déconnexion">Connexion &amp; déconnexion</a></li>
+<li><a href="#3-profils--niveaux-daccès">Profils &amp; niveaux d'accès</a></li>
+<li><a href="#4-parcours-administrateur--éditeur--conducteur">Parcours Administrateur / Éditeur / Conducteur</a></li>
+<li>4.1 <a href="#41-tableau-de-bord">Tableau de bord</a></li>
+<li>4.2 <a href="#42-projets--liste">Projets — Liste</a></li>
+<li>4.3 <a href="#43-créer-un-nouveau-projet">Créer un nouveau projet</a></li>
+<li>4.4 <a href="#44-détail-projet--planning-gantt">Détail projet — Planning Gantt</a></li>
+<li>4.5 <a href="#45-détail-projet--lots">Détail projet — Lots</a></li>
+<li>4.5c <a href="#45c--projets-modèles--illustration-des-3-concepts">Projets modèles : 3 concepts</a></li>
+<li>4.6 <a href="#46-détail-projet--dépendances">Détail projet — Dépendances</a></li>
+<li>4.7 <a href="#47-planning-global">Planning global</a></li>
+<li>4.8 <a href="#48-clients--maîtres-douvrage">Clients / Maîtres d'ouvrage</a></li>
+<li>4.9 <a href="#49-utilisateurs">Utilisateurs</a></li>
+<li>4.10 <a href="#410-équipes">Équipes</a></li>
+<li>4.11 <a href="#411-entreprise">Entreprise</a></li>
+<li>4.12 <a href="#412-notifications">Notifications</a></li>
+<li>4.13 <a href="#413-mode-demploi-intégré">Mode d'emploi intégré</a></li>
+<li><a href="#5-parcours-sous-traitant-salarié-externe">Parcours Sous-traitant (Salarié externe)</a></li>
+<li>5.1 <a href="#51-tableau-de-bord">Tableau de bord</a></li>
+<li>5.2 <a href="#52-mes-lots">Mes Lots</a></li>
+<li>5.3 <a href="#53-planning-personnel">Planning personnel</a></li>
+<li><a href="#6-workflows-clés">Workflows clés</a></li>
+<li>6.1 <a href="#61-créer-et-planifier-un-chantier-avec-lia">Créer et planifier un chantier avec l'IA</a></li>
+<li>6.2 <a href="#62-inviter-un-collaborateur">Inviter un collaborateur</a></li>
+<li>6.3 <a href="#63-déclarer-lavancement-dun-lot">Déclarer l'avancement d'un lot</a></li>
+<li>6.4 <a href="#64-calculer-le-chemin-critique-cpm">Calculer le chemin critique (CPM)</a></li>
+<li>6.5 <a href="#65-exporter-le-planning-en-pdf">Exporter le planning en PDF</a></li>
+<li><a href="#7-faq--astuces">FAQ &amp; astuces</a></li>
+</ol>
+<hr />
+<h2 id="1-présentation-générale">1. Présentation générale</h2>
+<p><strong>PlanningIA</strong> est un outil de coordination de chantiers BTP assisté par intelligence artificielle. Il permet de :</p>
+<ul>
+<li><strong>Créer et gérer des chantiers</strong> (projets) avec leurs lots de travaux</li>
+<li><strong>Générer automatiquement un planning</strong> via l'IA selon le type de chantier (façade, ITE, ravalement…)</li>
+<li><strong>Calculer le chemin critique (CPM)</strong> pour identifier les lots bloquants</li>
+<li><strong>Suivre l'avancement</strong> en temps réel avec des barres de progression</li>
+<li><strong>Coordonner les équipes et sous-traitants</strong> avec des notifications automatiques</li>
+<li><strong>Visualiser tous les chantiers</strong> sur un planning global multi-projets</li>
+</ul>
+<hr />
+<h2 id="2-connexion--déconnexion">2. Connexion &amp; déconnexion</h2>
+<h3 id="se-connecter">Se connecter</h3>
+<ol>
+<li>Rendez-vous sur <strong><a href="https://planningia.com">planningia.com</a></strong></li>
+<li>Saisissez votre <strong>adresse email</strong> et votre <strong>mot de passe</strong></li>
+<li>Cliquez sur <strong>Se connecter</strong></li>
+</ol>
+<p><img alt="Écran de connexion" src="./docs/screenshots/login.png" /></p>
+<blockquote>
+<p><em>L'interface s'adapte automatiquement à votre profil : les admins arrivent sur le Tableau de bord, les sous-traitants sur leur espace personnel.</em></p>
+</blockquote>
+<p><strong>Mot de passe oublié ?</strong> Cliquez sur « Mot de passe oublié ? » sous le formulaire → saisissez votre email → un lien de réinitialisation vous sera envoyé par mail.</p>
+<h3 id="se-déconnecter">Se déconnecter</h3>
+<p>Cliquez sur <strong>Déconnexion</strong> en bas du menu latéral gauche.</p>
+<h3 id="changer-de-langue">Changer de langue</h3>
+<p>Deux langues disponibles : <strong>FR</strong> (français) et <strong>TR</strong> (turc). Les boutons sont visibles en bas du menu latéral.</p>
+<hr />
+<h2 id="3-profils--niveaux-daccès">3. Profils &amp; niveaux d'accès</h2>
+<p>PlanningIA distingue <strong>deux rôles</strong> et <strong>quatre niveaux de droits internes</strong> :</p>
+<h3 id="rôles">Rôles</h3>
+<table>
+<thead>
+<tr>
+<th>Rôle</th>
+<th>Description</th>
+<th>Interface</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Admin</strong> (employé interne)</td>
+<td>Accès à la gestion complète de l'entreprise</td>
+<td><code>/dashboard</code> et sous-pages</td>
+</tr>
+<tr>
+<td><strong>Sous-traitant</strong></td>
+<td>Accès limité à ses propres lots et son planning</td>
+<td><code>/sub</code> et sous-pages</td>
+</tr>
+</tbody>
+</table>
+<h3 id="niveaux-de-droits-pour-les-admins-internes">Niveaux de droits (pour les admins internes)</h3>
+<table>
+<thead>
+<tr>
+<th>Niveau</th>
+<th>Badge</th>
+<th>Capacités</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>🔑 <strong>Admin</strong></td>
+<td>Orange</td>
+<td>Accès complet + gestion des droits utilisateurs. Max 2 par entreprise.</td>
+</tr>
+<tr>
+<td>✏️ <strong>Éditeur</strong></td>
+<td>Violet</td>
+<td>Lecture + écriture de tout, sauf modification des droits utilisateurs.</td>
+</tr>
+<tr>
+<td>🎯 <strong>Conducteur</strong></td>
+<td>Jaune</td>
+<td>Voit uniquement ses projets. Peut éditer, pas supprimer. Pas d'accès gestion droits.</td>
+</tr>
+<tr>
+<td>👁 <strong>Salarié</strong></td>
+<td>Gris</td>
+<td>Lecture seule de ses chantiers et équipes. Aucune modification.</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>💡 <strong>Astuce</strong> : La colonne <strong>TYPE / DROITS</strong> dans la liste Utilisateurs affiche deux badges : le type de personne (Salarié) et son niveau d'accès (Admin, Éditeur, etc.).</p>
+</blockquote>
+<hr />
+<h2 id="4-parcours-administrateur--éditeur--conducteur">4. Parcours Administrateur / Éditeur / Conducteur</h2>
+<h3 id="41-tableau-de-bord">4.1 Tableau de bord</h3>
+<p><strong>Menu :</strong> Tableau de bord</p>
+<p>Le tableau de bord affiche une vue synthétique de l'activité :</p>
+<ul>
+<li><strong>Projets actifs</strong> — nombre de chantiers en cours</li>
+<li><strong>Total projets</strong> — tous les projets de l'entreprise</li>
+<li><strong>Utilisateurs</strong> — total des collaborateurs invités</li>
+<li><strong>Notifications</strong> — alertes non lues</li>
+</ul>
+<p><img alt="Tableau de bord admin" src="./docs/screenshots/dashboard_admin.png" /></p>
+<blockquote>
+<p><em>Exemple : DESIGN FACADES — 80 projets, 44 utilisateurs actifs</em></p>
+</blockquote>
+<p>La section <strong>Projets récents</strong> liste les derniers chantiers modifiés avec leur statut et leur avancement. Cliquez sur <strong>Voir →</strong> pour accéder directement au détail d'un projet.</p>
+<hr />
+<h3 id="42-projets--liste">4.2 Projets — Liste</h3>
+<p><strong>Menu :</strong> Projets</p>
+<p><img alt="Liste des projets" src="./docs/screenshots/projects_list.png" /></p>
+<p>La liste affiche tous vos chantiers avec :
+- Nom du chantier et nom du client
+- Badge statut : <code>Devis</code> <code>Programmé</code> <code>En cours</code> <code>Livré</code> <code>SAV</code>
+- Barre d'avancement globale (% calculé sur les lots)
+- Date de début prévue
+- Nombre de lots</p>
+<p><strong>Filtres disponibles :</strong>
+- Par statut (Tous, Devis, Programmé, En cours…)
+- Par plage de dates de début
+- Par client
+- Par ville</p>
+<p><strong>Vues :</strong> Basculez entre la vue <strong>Cartes</strong> (grille) et la vue <strong>Liste</strong> (tableau) via les icônes en haut à droite.</p>
+<p><strong>Recherche :</strong> La barre de recherche filtre par nom, référence, ville ou client.</p>
+<p><strong>Tri :</strong> Choisissez le critère de tri (Date de début, Nom, Statut…) et l'ordre (↑↓).</p>
+<hr />
+<h3 id="43-créer-un-nouveau-projet">4.3 Créer un nouveau projet</h3>
+<p><strong>Menu :</strong> Projets → Nouveau projet</p>
+<p><img alt="Formulaire nouveau projet" src="./docs/screenshots/project_new.png" /></p>
+<p>Remplissez les champs :</p>
+<table>
+<thead>
+<tr>
+<th>Champ</th>
+<th>Obligatoire</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Nom du chantier</td>
+<td>✅</td>
+<td>Nom complet du projet</td>
+</tr>
+<tr>
+<td>Client</td>
+<td>✅</td>
+<td>Maître d'ouvrage (sélectionnable depuis votre liste clients)</td>
+</tr>
+<tr>
+<td>Statut</td>
+<td>✅</td>
+<td>Devis / Programmé / En cours / Livré / SAV</td>
+</tr>
+<tr>
+<td>Date de début</td>
+<td>✅</td>
+<td>Date prévue de démarrage des travaux</td>
+</tr>
+<tr>
+<td>Ville</td>
+<td>—</td>
+<td>Localisation du chantier</td>
+</tr>
+<tr>
+<td>Adresse</td>
+<td>—</td>
+<td>Adresse complète</td>
+</tr>
+<tr>
+<td>Description</td>
+<td>—</td>
+<td>Notes libres sur le projet</td>
+</tr>
+<tr>
+<td>Type de chantier</td>
+<td>—</td>
+<td>Sélectionner pour guider l'IA (Façade, ITE, Ravalement…)</td>
+</tr>
+</tbody>
+</table>
+<p>Cliquez <strong>Créer le projet</strong> pour valider. Vous serez redirigé vers la page détail du projet.</p>
+<hr />
+<h3 id="44-détail-projet--planning-gantt">4.4 Détail projet — Planning Gantt</h3>
+<p><strong>Navigation :</strong> Projets → [cliquer un projet] → onglet <strong>Planning Gantt</strong></p>
+<p><img alt="Planning Gantt" src="./docs/screenshots/project_gantt.png" /></p>
+<p>Le Gantt affiche tous les lots du projet sous forme de barres horizontales sur une timeline.</p>
+<p><strong>Éléments visibles :</strong></p>
+<table>
+<thead>
+<tr>
+<th>Élément</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>🔴 <strong>Chemin critique</strong></td>
+<td>Lots en rouge : tout retard impacte la date de fin du projet</td>
+</tr>
+<tr>
+<td>🟢 <strong>Terminé</strong></td>
+<td>Lots avec avancement 100%</td>
+</tr>
+<tr>
+<td><strong>Flèches FS</strong></td>
+<td>Dépendance Fin→Début entre lots</td>
+</tr>
+<tr>
+<td><strong>Flèches SS</strong></td>
+<td>Dépendance Début→Début</td>
+</tr>
+<tr>
+<td>⚡ <strong>Jalons</strong></td>
+<td>Dates clés matérialisées par une ligne verticale</td>
+</tr>
+<tr>
+<td><strong>Échéance</strong></td>
+<td>Date limite individuelle d'un lot</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Zoom :</strong> Basculez entre Jour / Semaine / Mois selon la granularité souhaitée.</p>
+<p><strong>Interactivité :</strong>
+- <strong>Glisser</strong> une barre pour déplacer le lot dans le temps
+- <strong>Étirer le bord droit</strong> d'une barre pour modifier la durée
+- Cliquer sur le <strong>📊</strong> d'un lot pour voir son historique d'avancement</p>
+<p><strong>Export PDF :</strong>
+- <strong>A4</strong> ou <strong>A3</strong> — le planning est capturé automatiquement et converti en PDF téléchargeable</p>
+<p><strong>Boutons d'action :</strong></p>
+<table>
+<thead>
+<tr>
+<th>Bouton</th>
+<th>Rôle</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>🤖 <strong>Générer par IA</strong></td>
+<td>Génère automatiquement les lots et dépendances selon le type de chantier</td>
+</tr>
+<tr>
+<td>🔵 <strong>Calculer le planning (CPM)</strong></td>
+<td>Recalcule les dates au plus tôt / plus tard et le chemin critique</td>
+</tr>
+<tr>
+<td>✏️ <strong>Modifier</strong></td>
+<td>Édite les informations générales du projet</td>
+</tr>
+<tr>
+<td>🗑️ <strong>Supprimer</strong></td>
+<td>Supprime définitivement le projet (admin uniquement)</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h3 id="45-détail-projet--lots">4.5 Détail projet — Lots</h3>
+<p><strong>Navigation :</strong> Projets → [cliquer un projet] → onglet <strong>Lots</strong></p>
+<p><img alt="Liste des lots" src="./docs/screenshots/project_lots.png" /></p>
+<p>L'onglet Lots affiche le tableau détaillé de tous les lots avec :</p>
+<table>
+<thead>
+<tr>
+<th>Colonne</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Code</strong></td>
+<td>Code alphanumérique du lot (ex : IT11, BA30…)</td>
+</tr>
+<tr>
+<td><strong>Désignation</strong></td>
+<td>Libellé du lot</td>
+</tr>
+<tr>
+<td><strong>Durée (j)</strong></td>
+<td>Durée prévue en jours ouvrés</td>
+</tr>
+<tr>
+<td><strong>Sous-traitant</strong></td>
+<td>Personne ou équipe assignée</td>
+</tr>
+<tr>
+<td><strong>Statut</strong></td>
+<td>À venir / En cours / Terminé / En pause</td>
+</tr>
+<tr>
+<td><strong>Avancement</strong></td>
+<td>Barre de progression + %</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Actions par lot :</strong>
+- 📊 Voir l'historique d'avancement
+- 📋 Voir les tâches du lot
+- ✂️ Gérer les assignations
+- <strong>Modifier</strong> les informations
+- <strong>Supprimer</strong> le lot</p>
+<p><strong>Ajouter des lots :</strong>
+- <strong>Depuis le catalogue</strong> — sélectionner des lots prédéfinis selon le corps d'état
+- <strong>+ Ajouter un lot</strong> — créer un lot personnalisé
+- <strong>🚂 Train de travaux</strong> — découper automatiquement un lot par zones/niveaux</p>
+<h3 id="45b-train-de-travaux-v3">4.5b Train de travaux (V3)</h3>
+<p>Le <strong>Train de travaux</strong> est une fonctionnalité avancée qui découpe un ou plusieurs lots père en une série de sous-lots par niveau ou zone de chantier. Chaque sous-lot hérite des dépendances du lot père et est chaîné automatiquement avec le sous-lot de la zone précédente.</p>
+<p><strong>Utilisation :</strong></p>
+<pre><code>1. Onglet Lots → Cliquer &quot;🚂 Train de travaux&quot;
+2. Sélectionner le(s) lot(s) à découper
+3. Choisir le type de découpage :
+   - Par niveaux (RDC, R+1, R+2…)
+   - Par zones (Zone A, Zone B…)
+   - Personnalisé (noms libres)
+4. Saisir le nombre de zones / les noms
+5. Cliquer &quot;🚂 Créer les sous-lots&quot;
+   → Les sous-lots sont créés et chaînés automatiquement
+   → Les dépendances successeurs du lot père sont redirigées vers le dernier sous-lot
+6. Cliquer &quot;Calculer le planning (CPM)&quot; pour recalculer les dates
+</code></pre>
+<p><strong>Exemple :</strong> Un lot "Bardage" découpé en 4 niveaux donne : BA-RDC → BA-R+1 → BA-R+2 → BA-R+3 avec dépendances FS automatiques.</p>
+<blockquote>
+<p>⚠️ Toujours relancer le CPM après la création d'un train de travaux.</p>
+</blockquote>
+<hr />
+<h3 id="45c--projets-modèles--illustration-des-3-concepts">4.5c — Projets modèles : illustration des 3 concepts</h3>
+<blockquote>
+<p>Ces deux projets sont accessibles sur <a href="https://planningia.com">planningia.com</a> et illustrent concrètement les différences entre <strong>lot simple</strong>, <strong>lot avec sous-tâches</strong>, <strong>lot avec découpage</strong> et <strong>train de travaux</strong>.</p>
+</blockquote>
+<hr />
+<h4 id="projet-1--modele--concepts-de-base">Projet 1 — MODELE : Concepts de base</h4>
+<p><strong>3 lots illustrant 3 types de structuration différents :</strong></p>
+<table>
+<thead>
+<tr>
+<th>Lot</th>
+<th>Type</th>
+<th>Détails</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>A10 — Échafaudage</strong></td>
+<td>Lot simple</td>
+<td>5j, autonome. Pas de sous-élément, pas de checklist.</td>
+</tr>
+<tr>
+<td><strong>B10 — Menuiseries ext.</strong></td>
+<td>Lot avec sous-tâches</td>
+<td>4 étapes internes : Commande → Livraison → Pose → Réception.</td>
+</tr>
+<tr>
+<td><strong>C10 — ITE Façades</strong></td>
+<td>Lot avec découpage</td>
+<td>2 sous-lots géographiques : C10-BatA et C10-BatB (chaînés FS).</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Sous-tâches du lot B10 (Menuiseries extérieures) :</strong></p>
+<table>
+<thead>
+<tr>
+<th>Sous-tâche</th>
+<th>Type</th>
+<th>Rôle</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Commande menuiseries</td>
+<td><code>commande</code></td>
+<td>Date de passation de commande</td>
+</tr>
+<tr>
+<td>Livraison sur chantier</td>
+<td><code>livraison</code></td>
+<td>Réception du matériel</td>
+</tr>
+<tr>
+<td>Pose des menuiseries</td>
+<td><code>execution</code></td>
+<td>Phase d'exécution des travaux</td>
+</tr>
+<tr>
+<td>Contrôle / Réception</td>
+<td>personnalisé</td>
+<td>Vérification contradictoire</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>📌 <strong>Sous-tâches vs sous-lots ?</strong>
+- <strong>Sous-tâches</strong> → checklist interne d'un lot. N'apparaissent <strong>pas</strong> comme barres indépendantes dans le Gantt. Servent au suivi des étapes de réalisation.
+- <strong>Sous-lots</strong> → découpage géographique ou par phase. Créent leurs <strong>propres barres dans le Gantt</strong> avec dates CPM autonomes.</p>
+</blockquote>
+<hr />
+<h4 id="projet-2--modele--train-de-travaux-immeuble-r2">Projet 2 — MODELE : Train de travaux (Immeuble R+2)</h4>
+<p><strong>3 lots × 3 niveaux = 9 sous-lots — 66 jours au total, 6 lots critiques</strong></p>
+<table>
+<thead>
+<tr>
+<th>Lot parent</th>
+<th>Durée / niveau</th>
+<th>Sous-lots créés</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>IT10 ITE Façades</td>
+<td>15j</td>
+<td>IT10-RDC → IT10-R+1 → IT10-R+2</td>
+</tr>
+<tr>
+<td>EN20 Enduit projeté</td>
+<td>10j</td>
+<td>EN20-RDC → EN20-R+1 → EN20-R+2</td>
+</tr>
+<tr>
+<td>BA30 Bardage</td>
+<td>12j</td>
+<td>BA30-RDC → BA30-R+1 → BA30-R+2</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Résultat dans le Gantt :</strong> les sous-lots avancent en <strong>diagonale</strong> — pendant qu'on finit l'ITE au RDC, l'enduit peut démarrer au RDC et l'ITE continue au R+1. Les équipes progressent sans attendre la fin d'un niveau complet.</p>
+<blockquote>
+<p>💡 <strong>Quand utiliser le train de travaux ?</strong> Idéal pour les immeubles à plusieurs niveaux ou les chantiers multi-bâtiments. Chaque corps d'état peut démarrer sur les zones terminées sans attendre la fin du lot parent complet.</p>
+</blockquote>
+<hr />
+<h3 id="46-détail-projet--dépendances">4.6 Détail projet — Dépendances</h3>
+<p><strong>Navigation :</strong> Projets → [cliquer un projet] → onglet <strong>Dépendances</strong></p>
+<p>Gérez les liens de précédence entre lots. Chaque dépendance indique quel lot doit être terminé (ou démarré) avant qu'un autre puisse commencer.</p>
+<p><strong>Types de dépendances :</strong>
+- <strong>FS (Fin → Début)</strong> : le lot B commence quand le lot A est terminé
+- <strong>SS (Début → Début)</strong> : le lot B commence en même temps que le lot A</p>
+<hr />
+<h3 id="46b-sous-projets-v3">4.6b Sous-projets (V3)</h3>
+<p>Un <strong>sous-projet</strong> est un chantier rattaché à un projet programme parent. Il dispose de son propre Gantt, ses propres lots et ses propres dépendances.</p>
+<p><strong>Créer un sous-projet :</strong></p>
+<ol>
+<li>Projets → Nouveau projet</li>
+<li>Cocher <strong>"Sous-projet"</strong> et sélectionner le <strong>projet parent</strong></li>
+<li>Renseigner les informations du sous-projet normalement</li>
+</ol>
+<p><strong>Navigation :</strong>
+- Dans la liste des projets, les sous-projets sont <strong>indentés</strong> sous leur parent
+- Un badge <strong>sous-projet</strong> est visible sur la fiche détail
+- Le projet parent affiche un onglet <strong>Sous-projets</strong> listant tous ses enfants</p>
+<hr />
+<h3 id="47-planning-global">4.7 Planning global</h3>
+<p><strong>Menu :</strong> Planning global</p>
+<p><img alt="Planning global" src="./docs/screenshots/planning_global.png" /></p>
+<p>Le planning global affiche <strong>tous les chantiers de l'entreprise</strong> sur une timeline partagée. Il permet d'avoir une vue d'ensemble de la charge de travail et d'anticiper les conflits de ressources.</p>
+<p><strong>Fonctionnalités :</strong>
+- Vue <strong>Mois</strong> (défaut) ou <strong>Semaine</strong>
+- Filtre par <strong>statut</strong> (Tous, En cours, Programmé…)
+- <strong>Recherche</strong> par nom de chantier
+- Légende des couleurs : Devis / Programmé / En cours / Livré / SAV</p>
+<p>Chaque ligne représente un projet. Une barre colorée matérialise sa période d'intervention.</p>
+<hr />
+<h3 id="48-clients--maîtres-douvrage">4.8 Clients / Maîtres d'ouvrage</h3>
+<p><strong>Menu :</strong> Clients</p>
+<p><img alt="Page clients" src="./docs/screenshots/clients.png" /></p>
+<p>Gérez votre carnet de clients (maîtres d'ouvrage, promoteurs, collectivités…).</p>
+<p><strong>Informations par client :</strong>
+- Nom / Raison sociale
+- Email, Téléphone
+- Adresse, Ville, Code postal
+- Notes libres
+- Nombre de chantiers associés</p>
+<p><strong>Créer un client :</strong></p>
+<ol>
+<li>Cliquez <strong>+ Nouveau client</strong></li>
+<li>Renseignez au minimum le <strong>Nom / Raison sociale</strong></li>
+<li>Cliquez <strong>Créer le client</strong></li>
+</ol>
+<p><img alt="Modal nouveau client" src="./docs/screenshots/client_modal.png" /></p>
+<p><strong>Fiche client :</strong> Cliquez sur un client pour accéder à sa fiche détaillée avec la liste de tous ses chantiers associés.</p>
+<blockquote>
+<p>💡 Lors de la création d'un projet, vous pouvez sélectionner un client existant depuis cette liste. Le lien client ↔ projet permet d'accéder à tous les chantiers d'un donneur d'ordre depuis sa fiche.</p>
+</blockquote>
+<hr />
+<h3 id="49-utilisateurs">4.9 Utilisateurs</h3>
+<p><strong>Menu :</strong> Utilisateurs</p>
+<p><img alt="Liste utilisateurs" src="./docs/screenshots/users.png" /></p>
+<p>Gérez tous les collaborateurs de votre entreprise. La page affiche :</p>
+<table>
+<thead>
+<tr>
+<th>Colonne</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Prénom / Nom</strong></td>
+<td>Identité du collaborateur</td>
+</tr>
+<tr>
+<td><strong>Email</strong></td>
+<td>Adresse de connexion</td>
+</tr>
+<tr>
+<td><strong>Entreprise</strong></td>
+<td>Société d'appartenance</td>
+</tr>
+<tr>
+<td><strong>TYPE / DROITS</strong></td>
+<td>Double badge : type (Salarié) + niveau d'accès (Admin/Éditeur/Conducteur/Salarié)</td>
+</tr>
+<tr>
+<td><strong>Actif</strong></td>
+<td>Statut du compte</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Filtres :</strong> Tous / Salariés / Sous-traitants</p>
+<p><strong>Inviter un utilisateur :</strong></p>
+<ol>
+<li>Cliquez <strong>+ Inviter un utilisateur</strong></li>
+<li>Saisissez l'<strong>email</strong> du collaborateur</li>
+<li>Choisissez son <strong>profil</strong> (Admin / Éditeur / Conducteur / Salarié)</li>
+<li>Choisissez son <strong>type</strong> (Salarié / Sous-traitant)</li>
+<li>Cliquez <strong>Envoyer l'invitation</strong></li>
+</ol>
+<p>→ Le collaborateur reçoit un email avec un lien pour créer son mot de passe.</p>
+<p><strong>Modifier un utilisateur :</strong></p>
+<p>Cliquez <strong>Modifier</strong> pour changer ses informations, son niveau d'accès ou son type. (Admin uniquement pour la modification des droits.)</p>
+<p><strong>Réinitialiser le mot de passe :</strong></p>
+<p>Cliquez sur l'icône 🔑 à droite du collaborateur pour lui envoyer un email de réinitialisation.</p>
+<hr />
+<h3 id="410-équipes">4.10 Équipes</h3>
+<p><strong>Menu :</strong> Équipes</p>
+<p><img alt="Page équipes" src="./docs/screenshots/teams.png" /></p>
+<p>Les équipes regroupent des salariés par corps de métier ou par chantier.</p>
+<p><strong>Informations d'une équipe :</strong>
+- Nom et couleur distinctive
+- Chef d'équipe
+- Liste des membres (onglet <strong>Membres</strong>)
+- Charge de travail (onglet <strong>Charge</strong>)</p>
+<p><strong>Créer une équipe :</strong></p>
+<ol>
+<li>Cliquez <strong>+ Créer une équipe</strong></li>
+<li>Donnez un nom et choisissez une couleur</li>
+<li>Désignez un chef d'équipe</li>
+<li>Ajoutez des membres depuis la liste des salariés</li>
+</ol>
+<p><strong>Affecter une équipe à un lot :</strong></p>
+<p>Depuis l'onglet Lots d'un projet, cliquez sur l'icône ✂️ d'un lot pour ouvrir la fenêtre d'assignation et sélectionnez l'équipe.</p>
+<blockquote>
+<p>💡 Les équipes et leur charge de travail sont visibles depuis la page <strong>Équipes → Charge</strong> — idéal pour vérifier qu'une équipe n'est pas suraffectée sur plusieurs chantiers simultanément.</p>
+</blockquote>
+<hr />
+<h3 id="411-entreprise">4.11 Entreprise</h3>
+<p><strong>Menu :</strong> Entreprise</p>
+<p><img alt="Fiche entreprise" src="./docs/screenshots/company.png" /></p>
+<p>Configurez les informations de votre entreprise :</p>
+<table>
+<thead>
+<tr>
+<th>Champ</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Nom de l'entreprise</td>
+<td>Raison sociale officielle</td>
+</tr>
+<tr>
+<td>Type d'entreprise</td>
+<td>Entreprise générale / Métier / Maître d'œuvre / Promoteur</td>
+</tr>
+<tr>
+<td>SIRET</td>
+<td>Numéro d'identification</td>
+</tr>
+<tr>
+<td>Adresse, Ville, Code postal</td>
+<td>Coordonnées</td>
+</tr>
+<tr>
+<td>Téléphone, Email</td>
+<td>Contacts officiels</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>⚠️ <strong>Important pour la génération IA :</strong> Pour les entreprises de façade, renseignez correctement le <strong>type d'entreprise</strong> et les <strong>types de lots</strong> pratiqués (ITE, Enduit, Bardage…). L'IA utilise ces informations pour générer un planning adapté à votre activité.</p>
+</blockquote>
+<hr />
+<h3 id="412-notifications">4.12 Notifications</h3>
+<p><strong>Menu :</strong> Notifications (ou icône 🔔 en haut à droite)</p>
+<p>Les notifications signalent automatiquement :
+- Une modification d'avancement sur un lot que vous suivez
+- Un nouveau sous-traitant assigné à un lot
+- Une date de lot dépassée
+- Des actions effectuées par vos collaborateurs</p>
+<p>Cliquez sur une notification pour naviguer directement vers l'élément concerné.</p>
+<p><strong>Tout marquer comme lu :</strong> bouton disponible en haut de la liste.</p>
+<hr />
+<h3 id="413-mode-demploi-intégré">4.13 Mode d'emploi intégré</h3>
+<p><strong>Menu :</strong> Mode d'emploi (en bas du menu latéral)</p>
+<p>L'application intègre un guide interactif accessible à tout moment. Il présente les workflows étape par étape selon votre profil (Administrateur, Éditeur/Conducteur, Salarié, Sous-traitant) avec des captures d'écran illustrées.</p>
+<p><strong>Export PDF :</strong> Bouton <strong>Imprimer / PDF</strong> en haut à droite pour sauvegarder le guide.</p>
+<hr />
+<h2 id="5-parcours-sous-traitant-salarié-externe">5. Parcours Sous-traitant (Salarié externe)</h2>
+<p>Le sous-traitant accède à une interface simplifiée, focalisée sur <strong>ses propres lots</strong>. Il ne voit jamais les informations d'autres entreprises.</p>
+<h3 id="51-tableau-de-bord">5.1 Tableau de bord</h3>
+<p><strong>URL :</strong> <code>/sub</code></p>
+<p><img alt="Dashboard sous-traitant" src="./docs/screenshots/sub_dashboard.png" /></p>
+<p>Après connexion, le sous-traitant voit :</p>
+<table>
+<thead>
+<tr>
+<th>Compteur</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Mes lots</strong></td>
+<td>Nombre total de lots qui lui sont assignés</td>
+</tr>
+<tr>
+<td><strong>En cours</strong></td>
+<td>Lots actuellement en cours d'exécution</td>
+</tr>
+<tr>
+<td><strong>Prochaines interventions</strong></td>
+<td>Lots dont la date de début est proche</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h3 id="52-mes-lots">5.2 Mes Lots</h3>
+<p><strong>Menu :</strong> Mes Lots</p>
+<p><img alt="Mes lots sous-traitant" src="./docs/screenshots/sub_lots.png" /></p>
+<p>Liste de tous les lots assignés au sous-traitant, tous chantiers confondus.</p>
+<p><strong>Informations par lot :</strong>
+- Code et désignation du lot
+- Nom du chantier
+- Durée et dates (début → fin)
+- Statut (À venir / En cours / Terminé / En pause)
+- Badge <strong>⚠️ Chemin critique</strong> si ce lot est sur le chemin critique
+- Barre de progression avec pourcentage</p>
+<p><strong>Déclarer l'avancement :</strong></p>
+<ol>
+<li>Cliquez <strong>Déclarer l'avancement</strong> sur le lot concerné</li>
+<li>Saisissez le pourcentage d'avancement (0 à 100%)</li>
+<li>Ajoutez un commentaire si nécessaire</li>
+<li>Validez</li>
+</ol>
+<p>→ L'avancement est immédiatement visible dans le Gantt côté administrateur. Une notification est envoyée aux admins.</p>
+<p><strong>Filtres rapides :</strong> Tous / À venir / En cours / En pause / Terminé</p>
+<hr />
+<h3 id="53-planning-personnel">5.3 Planning personnel</h3>
+<p><strong>Menu :</strong> Planning</p>
+<p><img alt="Planning sous-traitant" src="./docs/screenshots/sub_planning.png" /></p>
+<p>Vue Gantt personnelle montrant les lots du sous-traitant replacés dans le contexte de chaque chantier.</p>
+<p><strong>Lecture du planning :</strong>
+- Chaque projet est affiché en section avec ses lots assignés mis en évidence (surlignés en orange)
+- Les autres lots du même chantier apparaissent en gris (contexte)
+- Les dépendances (flèches) sont visibles
+- Badge <strong>⚠️ Chemin critique</strong> visible sur les lots concernés</p>
+<p><strong>Zoom :</strong> Jour / Semaine / Mois</p>
+<hr />
+<h2 id="6-workflows-clés">6. Workflows clés</h2>
+<h3 id="61-créer-et-planifier-un-chantier-avec-lia">6.1 Créer et planifier un chantier avec l'IA</h3>
+<p>C'est le workflow principal de PlanningIA — de la création à un planning complet en quelques clics.</p>
+<pre><code>1. Projets → Nouveau projet
+   → Renseigner nom, client, statut, date de début, type de chantier
+
+2. Page Détail → Cliquer &quot;Générer par IA&quot;
+   → L'IA crée automatiquement les lots adaptés au type de chantier
+   → Les dépendances logiques entre lots sont générées
+
+3. Cliquer &quot;Calculer le planning (CPM)&quot;
+   → Les dates au plus tôt sont calculées
+   → Le chemin critique est identifié (barres rouges)
+
+4. Ajuster manuellement si nécessaire
+   → Glisser les barres dans le Gantt
+   → Modifier les durées en étirant le bord droit
+
+5. Assigner des sous-traitants aux lots
+   → Onglet Lots → icône ✂️ → sélectionner sous-traitant
+</code></pre>
+<blockquote>
+<p>⏱ <strong>Temps estimé</strong> : 5 à 10 minutes pour un chantier de 15 lots.</p>
+</blockquote>
+<hr />
+<h3 id="62-inviter-un-collaborateur">6.2 Inviter un collaborateur</h3>
+<pre><code>1. Utilisateurs → + Inviter un utilisateur
+
+2. Renseigner :
+   - Email du collaborateur
+   - Profil : Admin / Éditeur / Conducteur / Salarié
+   - Type : Salarié (interne) / Sous-traitant (externe)
+
+3. Cliquer &quot;Envoyer l'invitation&quot;
+   → Email automatique envoyé avec lien d'activation
+
+4. Le collaborateur clique sur le lien
+   → Il définit son mot de passe
+   → Il se connecte directement
+
+5. (Optionnel) Ajouter le salarié à une équipe
+   → Équipes → sélectionner une équipe → Membres → Ajouter
+</code></pre>
+<hr />
+<h3 id="63-déclarer-lavancement-dun-lot">6.3 Déclarer l'avancement d'un lot</h3>
+<p><strong>Côté sous-traitant :</strong></p>
+<pre><code>1. Mes Lots → Trouver le lot concerné
+2. Cliquer &quot;Déclarer l'avancement&quot;
+3. Saisir le % (ex: 35%)
+4. Ajouter un commentaire (optionnel)
+5. Valider
+</code></pre>
+<p><strong>Côté administrateur :</strong>
+- La barre de progression se met à jour dans le Gantt et l'onglet Lots
+- Une notification apparaît dans le centre de notifications
+- L'historique des déclarations est consultable via l'icône 📊 sur le lot</p>
+<hr />
+<h3 id="64-calculer-le-chemin-critique-cpm">6.4 Calculer le chemin critique (CPM)</h3>
+<p>Le calcul CPM (Critical Path Method) détermine :
+- <strong>La date de fin au plus tôt</strong> du projet
+- <strong>Les lots bloquants</strong> (chemin critique) : tout retard sur ces lots retarde l'ensemble du projet</p>
+<pre><code>1. Depuis la page détail d'un projet
+2. Cliquer &quot;Calculer le planning (CPM)&quot;
+3. Les lots du chemin critique apparaissent avec un contour rouge
+4. Les marges de chaque lot sont recalculées
+</code></pre>
+<blockquote>
+<p>⚠️ <strong>À relancer après chaque modification</strong> de durée ou de dépendance.</p>
+</blockquote>
+<hr />
+<h3 id="65-exporter-le-planning-en-pdf">6.5 Exporter le planning en PDF</h3>
+<pre><code>1. Ouvrir le Planning Gantt d'un projet
+2. Choisir le zoom (Semaine recommandé pour un projet standard)
+3. Cliquer &quot;PDF A4&quot; ou &quot;PDF A3&quot;
+   → A4 : portrait, 1 à 3 mois visibles
+   → A3 : paysage, 2 à 6 mois visibles (recommandé pour les gros chantiers)
+4. Le PDF se télécharge automatiquement
+</code></pre>
+<hr />
+<h2 id="7-faq--astuces">7. FAQ &amp; astuces</h2>
+<p><strong>Q : Comment l'IA choisit-elle les lots à générer ?</strong></p>
+<p>Elle s'appuie sur le <strong>type de chantier</strong> sélectionné (ITE, Façade, Ravalement, etc.) et sur les <strong>types de lots</strong> configurés dans la fiche Entreprise. Plus ces informations sont précises, plus le planning généré est pertinent.</p>
+<hr />
+<p><strong>Q : Le chemin critique n'apparaît pas, que faire ?</strong></p>
+<p>Cliquez sur <strong>Calculer le planning (CPM)</strong> depuis la page détail du projet. Le calcul doit être relancé manuellement après chaque modification.</p>
+<hr />
+<p><strong>Q : Un sous-traitant ne voit pas son lot, pourquoi ?</strong></p>
+<p>Vérifiez que le sous-traitant a bien été <strong>assigné au lot</strong> (onglet Lots → icône ✂️). L'assignation doit utiliser son nom d'utilisateur enregistré dans PlanningIA (pas juste un texte libre).</p>
+<hr />
+<p><strong>Q : Comment supprimer un projet ?</strong></p>
+<p>Bouton <strong>Supprimer</strong> (rouge) en haut à droite de la page détail. Action réservée aux utilisateurs avec le niveau <strong>Admin</strong> ou <strong>Éditeur</strong>. Un projet avec des lots et des dépendances peut être supprimé — tout est effacé simultanément.</p>
+<hr />
+<p><strong>Q : Peut-on avoir plusieurs entreprises sur la même plateforme ?</strong></p>
+<p>Oui. Chaque entreprise dispose de son espace cloisonné. Les données d'une entreprise ne sont jamais visibles par une autre.</p>
+<hr />
+<p><strong>Q : Différence entre Salarié (type) et Salarié (droits) ?</strong></p>
+<ul>
+<li><strong>Type "Salarié"</strong> = employé interne de l'entreprise (par opposition au Sous-traitant externe)</li>
+<li><strong>Droits "Salarié"</strong> = niveau d'accès en lecture seule (le plus restrictif)</li>
+</ul>
+<p>Un même employé peut être de type "Salarié" avec des droits "Éditeur" — il voit tout mais ne peut pas modifier les droits d'autres utilisateurs.</p>
+<hr />
+<p><strong>Q : Comment changer la langue ?</strong></p>
+<p>Boutons <strong>FR</strong> / <strong>TR</strong> en bas du menu latéral gauche.</p>
+<hr />
+<h2 id="récapitulatif-des-urls">Récapitulatif des URLs</h2>
+<table>
+<thead>
+<tr>
+<th>Page</th>
+<th>URL</th>
+<th>Accès</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Connexion</td>
+<td><code>/login</code></td>
+<td>Tous</td>
+</tr>
+<tr>
+<td>Tableau de bord admin</td>
+<td><code>/dashboard</code></td>
+<td>Admin/Éditeur/Conducteur/Salarié</td>
+</tr>
+<tr>
+<td>Projets</td>
+<td><code>/projects</code></td>
+<td>Admin/Éditeur/Conducteur/Salarié</td>
+</tr>
+<tr>
+<td>Nouveau projet</td>
+<td><code>/projects/new</code></td>
+<td>Admin/Éditeur/Conducteur</td>
+</tr>
+<tr>
+<td>Détail projet</td>
+<td><code>/projects/:id</code></td>
+<td>Admin/Éditeur/Conducteur/Salarié</td>
+</tr>
+<tr>
+<td>Planning global</td>
+<td><code>/planning</code></td>
+<td>Admin/Éditeur/Conducteur/Salarié</td>
+</tr>
+<tr>
+<td>Clients</td>
+<td><code>/clients</code></td>
+<td>Admin/Éditeur</td>
+</tr>
+<tr>
+<td>Utilisateurs</td>
+<td><code>/users</code></td>
+<td>Admin/Éditeur/Conducteur/Salarié</td>
+</tr>
+<tr>
+<td>Équipes</td>
+<td><code>/teams</code></td>
+<td>Admin/Éditeur/Conducteur/Salarié</td>
+</tr>
+<tr>
+<td>Entreprise</td>
+<td><code>/company</code></td>
+<td>Admin/Éditeur</td>
+</tr>
+<tr>
+<td>Notifications</td>
+<td><code>/notifications</code></td>
+<td>Tous</td>
+</tr>
+<tr>
+<td>Mode d'emploi</td>
+<td><code>/aide</code></td>
+<td>Tous</td>
+</tr>
+<tr>
+<td>Dashboard sous-traitant</td>
+<td><code>/sub</code></td>
+<td>Sous-traitant</td>
+</tr>
+<tr>
+<td>Mes lots</td>
+<td><code>/sub/lots</code></td>
+<td>Sous-traitant</td>
+</tr>
+<tr>
+<td>Planning personnel</td>
+<td><code>/sub/planning</code></td>
+<td>Sous-traitant</td>
+</tr>
+<tr>
+<td>Notifications ST</td>
+<td><code>/sub/notifications</code></td>
+<td>Sous-traitant</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="index-des-screenshots-pris-en-session">Index des screenshots pris en session</h2>
+<blockquote>
+<p>Captures prises sur <a href="https://planningia.com">planningia.com</a> — 8 mars 2026 — compte <code>admin@planningia.fr</code></p>
+</blockquote>
+<h3 id="session-v3-2026-03-08">Session V3 (2026-03-08)</h3>
+<table>
+<thead>
+<tr>
+<th>ID session</th>
+<th>Page</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ss_1113p1lu9</code></td>
+<td>Dashboard</td>
+<td>58 projets actifs, 80 total, 49 users, projets récents</td>
+</tr>
+<tr>
+<td><code>ss_5357bzkvs</code></td>
+<td>Liste projets</td>
+<td>80 chantiers, filtres complets (statut/CPM/dates/client/ville)</td>
+</tr>
+<tr>
+<td><code>ss_9777akkr3</code></td>
+<td>Gantt — ITE COPRO BELGRADE</td>
+<td>Sous-lots visibles, chemin critique, zoom semaine</td>
+</tr>
+<tr>
+<td><code>ss_4963cs3yo</code></td>
+<td>Lots — ITE COPRO BELGRADE</td>
+<td>Tableau avec indéntation sous-lots, bouton Train de travaux</td>
+</tr>
+<tr>
+<td><code>ss_02996ivnm</code></td>
+<td>Dépendances</td>
+<td>Liste prédécesseur/type FS/successeur/décalage</td>
+</tr>
+<tr>
+<td><code>ss_9896zf4y2</code></td>
+<td>Clients</td>
+<td>44 maîtres d'ouvrage, recherche, colonnes tri</td>
+</tr>
+<tr>
+<td><code>ss_4873ukzxj</code></td>
+<td>Planning global</td>
+<td>Tous chantiers, vue mois, ligne du temps 2025→2027</td>
+</tr>
+<tr>
+<td><code>ss_3690yo7oq</code></td>
+<td>Utilisateurs</td>
+<td>49 salariés, badges TYPE/DROITS, filtres</td>
+</tr>
+<tr>
+<td><code>ss_1549bbu5s</code></td>
+<td>Équipes</td>
+<td>8 équipes (Bardage, Echafaudage, Enduit Projeté, Façade Grésée 1 &amp; 2, Polyvalente 1–3)</td>
+</tr>
+<tr>
+<td><code>ss_0732j0zh1</code></td>
+<td>Entreprise</td>
+<td>DESIGN FACADES, types de lots par défaut cochés</td>
+</tr>
+<tr>
+<td><code>ss_9771dj9g0</code></td>
+<td>Notifications</td>
+<td>Page vide (aucune notification active)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="session-v31--projets-modèles-2026-03-08">Session V3.1 — Projets modèles (2026-03-08)</h3>
+<table>
+<thead>
+<tr>
+<th>ID session</th>
+<th>Projet</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ss_64652bltl</code></td>
+<td>MODELE — Concepts de base</td>
+<td>Gantt complet : A10 (lot simple), B10 avec 4 sous-tâches, C10 avec sous-lots BatA/BatB</td>
+</tr>
+<tr>
+<td><code>ss_0017jm0sq</code></td>
+<td>MODELE — Train de travaux R+2</td>
+<td>Gantt — diagonale du train : IT10/EN20/BA30 × RDC/R+1/R+2</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<p><em>Document généré automatiquement avec captures d'écran en production — PlanningIA © 2026</em></p></body></html>

@@ -1,4 +1,4 @@
-const DEFAULT_FROM = 'PlanningIA <noreply@planningia.fr>'
+const DEFAULT_FROM = 'PlanningIA <noreply@planningia.com>'
 const APP_URL = 'https://www.planningia.com'
 
 export async function sendEmail(
@@ -10,13 +10,17 @@ export async function sendEmail(
 ): Promise<void> {
   if (!apiKey || !to) return
   try {
-    await fetch('https://api.resend.com/emails', {
+    const res = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ from: from || DEFAULT_FROM, to: [to], subject, html }),
     })
-  } catch {
-    // Email failure must never block the main operation
+    if (!res.ok) {
+      const body = await res.text().catch(() => '')
+      console.error(`[email] Resend error ${res.status}: ${body}`)
+    }
+  } catch (err) {
+    console.error('[email] fetch error:', err)
   }
 }
 
