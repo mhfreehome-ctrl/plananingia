@@ -1,19 +1,39 @@
-# WORKFLOW — PLANNINGAI
+# WORKFLOW — PlanningAI
 
-## ⚠️ RÈGLE ABSOLUE
-**Ne jamais utiliser `wrangler deploy` directement.**
-**Tout déploiement passe par `git push`.**
+## Déploiement
 
-## Déployer une modification
 ```bash
-git add -A
-git commit -m "description"
-git push
+cd "/Volumes/Crucial X9 Pro For Mac/SynologyDrive/03 - ETUDES DEVELLOPEMENT EN COURS/CLAUDE DT/PLANNINGAI"
+./deploy.sh
 ```
-→ GitHub Actions déploie automatiquement sur Cloudflare Workers en 1-2 min.
 
-## Vérifier le déploiement
-https://github.com/mhfreehome-ctrl/plananingia/actions
+Ce script fait tout en une commande :
+1. **Worker Cloudflare** → `wrangler deploy` (API)
+2. **Pages Cloudflare** → `npm run build` + `wrangler pages deploy` (frontend)
+3. **GitHub** → `git push` (backup du code)
 
-## Repo GitHub
-https://github.com/mhfreehome-ctrl/plananingia
+## Déploiement partiel (si besoin)
+
+Worker seul :
+```bash
+cd worker && npm run deploy
+```
+
+Pages seules :
+```bash
+cd pages && npm run build && npx wrangler pages deploy dist --project-name planningia
+```
+
+## Structure
+```
+PLANNINGAI/
+├── worker/        — API Hono (Cloudflare Workers)
+├── pages/         — Frontend React + Vite (Cloudflare Pages)
+└── wrangler.toml  — Config Cloudflare
+```
+
+## Ressources Cloudflare
+- Worker : `planningai-api` → planningai-api.mhfreehome.workers.dev
+- Pages : `planningia` → planningia.com
+- D1 : `f89b9344` / KV : `4665fa79`
+- GitHub : github.com/mhfreehome-ctrl/plananingia
