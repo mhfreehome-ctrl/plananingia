@@ -1,0 +1,1 @@
+ALTER TABLE lots ADD COLUMN parent_lot_id TEXT REFERENCES lots(id) ON DELETE SET NULL;

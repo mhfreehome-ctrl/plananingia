@@ -1,0 +1,2 @@
+ALTER TABLE lots ADD COLUMN market_deadline TEXT;
+ALTER TABLE lots ADD COLUMN is_provisional INTEGER DEFAULT 0;

@@ -1,0 +1,16 @@
+{
+  "name": "planningIA",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": ["worker", "pages"],
+  "scripts": {
+    "dev:api": "cd worker && wrangler dev",
+    "dev:web": "cd pages && npm run dev",
+    "deploy:api": "cd worker && wrangler deploy",
+    "deploy:web": "cd pages && npm run build && wrangler pages deploy dist --project-name planningIA",
+    "db:migrate": "wrangler d1 execute planningIA --file=migrations/0001_schema.sql",
+    "db:seed": "wrangler d1 execute planningIA --file=migrations/0002_seed.sql",
+    "db:migrate:remote": "wrangler d1 execute planningIA --remote --file=migrations/0001_schema.sql",
+    "db:seed:remote": "wrangler d1 execute planningIA --remote --file=migrations/0002_seed.sql"
+  }
+}

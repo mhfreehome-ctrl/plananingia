@@ -1,0 +1,16 @@
+name = "planningai-api"
+main = "worker/src/index.ts"
+compatibility_date = "2024-11-01"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+ENVIRONMENT = "production"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "planningAI-v2"
+database_id = "f89b9344-ab63-42c7-b73c-3624de36ce07"
+
+[[kv_namespaces]]
+binding = "KV"
+id = "4665fa794ded4f719560dd9f03bc2e2f"
