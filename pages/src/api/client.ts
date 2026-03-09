@@ -2,57 +2,33 @@ const BASE = import.meta.env.PROD
   ? 'https://planningai-api.mhfreehome.workers.dev/api'
   : '/api'
 
-const TOKEN_KEY = 'planningai_access_token'
-const REFRESH_KEY = 'planningai_refresh_token'
-
-export function saveTokens(access: string, refresh: string) {
-  localStorage.setItem(TOKEN_KEY, access)
-  localStorage.setItem(REFRESH_KEY, refresh)
-}
-
-export function clearTokens() {
-  localStorage.removeItem(TOKEN_KEY)
-  localStorage.removeItem(REFRESH_KEY)
-}
-
-function buildHeaders(extra?: Record<string, string>): Record<string, string> {
-  const headers: Record<string, string> = { 'Content-Type': 'application/json', ...extra }
-  const token = localStorage.getItem(TOKEN_KEY)
-  if (token) headers['Authorization'] = `Bearer ${token}`
-  return headers
-}
-
 async function req<T>(method: string, path: string, body?: unknown): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     method,
-    headers: buildHeaders(),
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
     body: body ? JSON.stringify(body) : undefined,
   })
 
   if (res.status === 401) {
-    // Tentative de refresh silencieux avec le refresh_token stocké
-    const refreshToken = localStorage.getItem(REFRESH_KEY)
-    if (refreshToken) {
-      const r = await fetch(`${BASE}/auth/refresh`, {
-        method: 'POST',
+    // Tentative de refresh silencieux — cookie refresh_token envoyé automatiquement
+    const r = await fetch(`${BASE}/auth/refresh`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+    })
+    if (r.ok) {
+      // Retry la requête originale avec le nouveau cookie access_token
+      const res2 = await fetch(`${BASE}${path}`, {
+        method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ refresh_token: refreshToken }),
+        credentials: 'include',
+        body: body ? JSON.stringify(body) : undefined,
       })
-      if (r.ok) {
-        const data = await r.json() as { access_token: string; refresh_token: string }
-        saveTokens(data.access_token, data.refresh_token)
-        // Retry la requête originale avec le nouveau token
-        const res2 = await fetch(`${BASE}${path}`, {
-          method,
-          headers: buildHeaders(),
-          body: body ? JSON.stringify(body) : undefined,
-        })
-        if (!res2.ok) throw new Error(await res2.text())
-        return res2.json() as Promise<T>
-      }
+      if (!res2.ok) throw new Error(await res2.text())
+      return res2.json() as Promise<T>
     }
-    clearTokens()
-    // Ne pas rediriger si déjà sur /login — évite la boucle infinie
+    // Refresh échoué — redirection login (garde anti-boucle)
     if (window.location.pathname !== '/login') window.location.href = '/login'
     throw new Error('Unauthorized')
   }
@@ -186,25 +162,20 @@ export const api = {
     create: (data: any) => post<any>('/companies', data),
   },
   platform: {
-    // Lot templates
     lotTemplates: (catalog: 'btp' | 'facade') => get<any>(`/platform/lot-templates?catalog=${catalog}`),
     createLotTemplate: (data: any) => post<any>('/platform/lot-templates', data),
     updateLotTemplate: (id: string, data: any) => put<any>(`/platform/lot-templates/${id}`, data),
     deleteLotTemplate: (id: string) => del(`/platform/lot-templates/${id}`),
-    // Lot template deps
     createLotDep: (data: any) => post<any>('/platform/lot-template-deps', data),
     updateLotDep: (id: string, data: any) => put<any>(`/platform/lot-template-deps/${id}`, data),
     deleteLotDep: (id: string) => del(`/platform/lot-template-deps/${id}`),
-    // Menu config
     menuConfig: () => get<any[]>('/platform/menu-config'),
     saveMenuConfig: (items: any[]) => put<any[]>('/platform/menu-config', items),
-    // Companies
     companies: () => get<any[]>('/platform/companies'),
     createCompany: (data: any) => post<any>('/platform/companies', data),
     updateCompany: (id: string, data: any) => put<any>(`/platform/companies/${id}`, data),
     inviteToCompany: (id: string, data: any) => post<any>(`/platform/companies/${id}/invite`, data),
     blockCompany: (id: string, blocked: boolean) => put<any>(`/platform/companies/${id}/block`, { blocked }),
-    // Stats
     stats: () => get<any>('/platform/stats'),
   },
 }

@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { api, saveTokens, clearTokens } from '../api/client'
+import { api } from '../api/client'
 
 interface AuthUser {
   id: string; email: string; role: 'admin' | 'subcontractor'
@@ -39,12 +39,7 @@ export const useAuth = create<AuthStore>((set) => ({
   loading: true,
 
   init: async () => {
-    // Sans token, l'utilisateur n'est pas connecté — pas besoin d'appeler l'API
-    // Évite la race condition : init() inflight → 401 → écrase le user set par login()
-    if (!localStorage.getItem('planningai_access_token')) {
-      set({ user: null, loading: false })
-      return
-    }
+    // Cookies HttpOnly envoyés automatiquement — appel direct à /auth/me
     try {
       const raw = await api.auth.me()
       set({ user: parseUser(raw), loading: false })
@@ -55,14 +50,12 @@ export const useAuth = create<AuthStore>((set) => ({
 
   login: async (email, password) => {
     const data = await api.auth.login(email, password)
-    saveTokens(data.access_token, data.refresh_token)
-    // loading: false garantit que RequireAuth ne bloque pas sur init() inflight
-    set({ user: { ...data.user, company_activity: null, company_lot_types: null, company_display_name: null }, loading: false })
+    // Cookies access_token + refresh_token posés par le worker (HttpOnly)
+    set({ user: parseUser(data.user), loading: false })
   },
 
   logout: async () => {
     try { await api.auth.logout() } catch {}
-    clearTokens()
     set({ user: null })
   },
 
