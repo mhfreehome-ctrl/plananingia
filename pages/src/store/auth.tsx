@@ -52,9 +52,13 @@ export const useAuth = create<AuthStore>((set) => ({
     const data = await api.auth.login(email, password)
     // Persist tokens for cross-session + mobile compatibility
     saveTokens(data.access_token, data.refresh_token)
-    // Recharge le profil complet via /me
-    const raw = await api.auth.me()
-    set({ user: parseUser(raw) })
+    // Profil de base immédiatement disponible
+    set({ user: { ...data.user, company_activity: null, company_lot_types: null, company_display_name: null } })
+    // Recharge le profil complet via /me (non-bloquant)
+    try {
+      const raw = await api.auth.me()
+      set({ user: parseUser(raw) })
+    } catch {}
   },
 
   logout: async () => {
