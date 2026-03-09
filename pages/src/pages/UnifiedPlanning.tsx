@@ -301,7 +301,7 @@ export default function UnifiedPlanning() {
                   const start = p.gantt_start ? new Date(p.gantt_start).toLocaleDateString() : '—'
                   const end   = p.gantt_end   ? new Date(p.gantt_end).toLocaleDateString()   : '—'
                   return (
-                    <tr key={p.id} className="cursor-pointer hover:bg-gray-50" onClick={() => navigate(`/projects/${p.id}`)}>
+                    <tr key={p.id} className="cursor-pointer hover:bg-gray-50" onClick={() => window.open(`/projects/${p.id}`, '_blank')}>
                       <td className="font-medium text-primary-700">{p.name}</td>
                       <td>
                         <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full" style={{ background: color + '22', color }}>
@@ -361,7 +361,7 @@ export default function UnifiedPlanning() {
               {filtered.map((p, i) => (
                 <div
                   key={p.id}
-                  onClick={() => navigate(`/projects/${p.id}`)}
+                  onClick={() => window.open(`/projects/${p.id}`, '_blank')}
                   className="flex items-center gap-2 px-3 cursor-pointer hover:bg-blue-50 transition-colors border-b border-gray-100"
                   style={{ height: ROW_H }}
                   title={`${p.name}${p.city ? ' — ' + p.city : ''}`}
@@ -478,7 +478,7 @@ export default function UnifiedPlanning() {
                   <g
                     key={p.id}
                     style={{ cursor: 'pointer' }}
-                    onClick={() => navigate(`/projects/${p.id}`)}
+                    onClick={() => window.open(`/projects/${p.id}`, '_blank')}
                   >
                     {hasBar ? (
                       <>

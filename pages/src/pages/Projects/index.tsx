@@ -373,7 +373,7 @@ export default function Projects() {
         // ── VUE CARTES ──────────────────────────────────────
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {hierarchical.map(({ project: p, isChild }) => (
-            <Link key={p.id} to={`/projects/${p.id}`}
+            <Link key={p.id} to={`/projects/${p.id}`} target="_blank" rel="noopener noreferrer"
               className={`card hover:shadow-md transition-all hover:-translate-y-0.5 block ${isChild ? 'ml-6 border-l-4 border-sky-300' : ''}`}>
               <div className="p-5">
                 <div className="flex items-start justify-between gap-2 mb-1">
@@ -444,7 +444,7 @@ export default function Projects() {
                     <td className="px-3 py-3 max-w-[220px]">
                       <div className="flex items-center gap-1.5 flex-wrap">
                         <ProjectTypeBadge type={p.project_type || 'standalone'} />
-                        <Link to={`/projects/${p.id}`} className={`font-semibold hover:text-indigo-700 transition-colors block truncate ${isChild ? 'text-sky-800' : 'text-gray-800'}`}>
+                        <Link to={`/projects/${p.id}`} target="_blank" rel="noopener noreferrer" className={`font-semibold hover:text-indigo-700 transition-colors block truncate ${isChild ? 'text-sky-800' : 'text-gray-800'}`}>
                           {p.name}
                         </Link>
                       </div>
@@ -486,9 +486,9 @@ export default function Projects() {
 
                     {/* Action */}
                     <td className="px-3 py-3">
-                      <Link to={`/projects/${p.id}`}
+                      <Link to={`/projects/${p.id}`} target="_blank" rel="noopener noreferrer"
                         className="opacity-0 group-hover:opacity-100 transition-opacity text-indigo-500 hover:text-indigo-700 font-medium text-xs whitespace-nowrap">
-                        {t('projects.open')} →
+                        {t('projects.open')} ↗
                       </Link>
                     </td>
                   </tr>

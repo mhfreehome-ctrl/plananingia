@@ -5,18 +5,17 @@ import type { Env } from '../types'
 
 const teams = new Hono<{ Bindings: Env }>()
 
-// GET /api/teams — liste les équipes de la société connectée
+// GET /api/teams — liste les équipes de la société connectée (ou toutes si super admin)
 teams.get('/teams', requireAuth, async (c) => {
   const user = c.get('user')
-  if (!user.company_id) return c.json([])
   const rows = await c.env.DB.prepare(`
     SELECT t.*,
       u.first_name || ' ' || COALESCE(u.last_name,'') as leader_name
     FROM teams t
     LEFT JOIN users u ON u.id = t.leader_id
-    WHERE t.company_id = ?
+    WHERE (t.company_id = ? OR ? IS NULL)
     ORDER BY t.name
-  `).bind(user.company_id).all()
+  `).bind(user.company_id, user.company_id).all()
   return c.json(rows.results)
 })
 
@@ -24,7 +23,7 @@ teams.get('/teams', requireAuth, async (c) => {
 teams.get('/teams/:id', requireAdmin, async (c) => {
   const { id } = c.req.param()
   const user = c.get('user')
-  const team = await c.env.DB.prepare('SELECT * FROM teams WHERE id = ? AND company_id = ?').bind(id, user.company_id).first()
+  const team = await c.env.DB.prepare('SELECT * FROM teams WHERE id = ? AND (company_id = ? OR ? IS NULL)').bind(id, user.company_id, user.company_id).first()
   if (!team) return c.json({ error: 'Not found' }, 404)
   const members = await c.env.DB.prepare(`
     SELECT tm.*, u.first_name, u.last_name, u.email, u.company_name, u.user_type
@@ -53,7 +52,7 @@ teams.post('/teams', requireAdmin, async (c) => {
 teams.put('/teams/:id', requireAdmin, async (c) => {
   const { id } = c.req.param()
   const user = c.get('user')
-  const team = await c.env.DB.prepare('SELECT id FROM teams WHERE id = ? AND company_id = ?').bind(id, user.company_id).first()
+  const team = await c.env.DB.prepare('SELECT id FROM teams WHERE id = ? AND (company_id = ? OR ? IS NULL)').bind(id, user.company_id, user.company_id).first()
   if (!team) return c.json({ error: 'Forbidden' }, 403)
   const body = await c.req.json()
   await c.env.DB.prepare(
@@ -66,8 +65,8 @@ teams.put('/teams/:id', requireAdmin, async (c) => {
 teams.delete('/teams/:id', requireAdmin, async (c) => {
   const { id } = c.req.param()
   const user = c.get('user')
-  // Vérifie que l'équipe appartient bien à la société de l'admin
-  const team = await c.env.DB.prepare('SELECT id FROM teams WHERE id = ? AND company_id = ?').bind(id, user.company_id).first()
+  // Vérifie que l'équipe appartient bien à la société de l'admin (ou super admin)
+  const team = await c.env.DB.prepare('SELECT id FROM teams WHERE id = ? AND (company_id = ? OR ? IS NULL)').bind(id, user.company_id, user.company_id).first()
   if (!team) return c.json({ error: 'Not found' }, 404)
   await c.env.DB.prepare('DELETE FROM teams WHERE id = ?').bind(id).run()
   return c.json({ ok: true })
@@ -77,7 +76,7 @@ teams.delete('/teams/:id', requireAdmin, async (c) => {
 teams.get('/teams/:id/members', requireAdmin, async (c) => {
   const { id } = c.req.param()
   const user = c.get('user')
-  const team = await c.env.DB.prepare('SELECT id FROM teams WHERE id = ? AND company_id = ?').bind(id, user.company_id).first()
+  const team = await c.env.DB.prepare('SELECT id FROM teams WHERE id = ? AND (company_id = ? OR ? IS NULL)').bind(id, user.company_id, user.company_id).first()
   if (!team) return c.json({ error: 'Forbidden' }, 403)
   const rows = await c.env.DB.prepare(`
     SELECT tm.*, u.first_name, u.last_name, u.email, u.company_name, u.user_type
@@ -92,7 +91,7 @@ teams.get('/teams/:id/members', requireAdmin, async (c) => {
 teams.post('/teams/:id/members', requireAdmin, async (c) => {
   const { id } = c.req.param()
   const user = c.get('user')
-  const team = await c.env.DB.prepare('SELECT id FROM teams WHERE id = ? AND company_id = ?').bind(id, user.company_id).first()
+  const team = await c.env.DB.prepare('SELECT id FROM teams WHERE id = ? AND (company_id = ? OR ? IS NULL)').bind(id, user.company_id, user.company_id).first()
   if (!team) return c.json({ error: 'Forbidden' }, 403)
   const body = await c.req.json()
   if (!body.user_id) return c.json({ error: 'user_id required' }, 400)
@@ -111,7 +110,7 @@ teams.post('/teams/:id/members', requireAdmin, async (c) => {
 teams.get('/teams/:id/lots', requireAdmin, async (c) => {
   const { id } = c.req.param()
   const user = c.get('user')
-  const team = await c.env.DB.prepare('SELECT id FROM teams WHERE id = ? AND company_id = ?').bind(id, user.company_id).first()
+  const team = await c.env.DB.prepare('SELECT id FROM teams WHERE id = ? AND (company_id = ? OR ? IS NULL)').bind(id, user.company_id, user.company_id).first()
   if (!team) return c.json({ error: 'Forbidden' }, 403)
   const rows = await c.env.DB.prepare(`
     SELECT l.*, p.name as project_name FROM lots l
@@ -126,7 +125,7 @@ teams.get('/teams/:id/lots', requireAdmin, async (c) => {
 teams.delete('/teams/:id/members/:userId', requireAdmin, async (c) => {
   const { id, userId } = c.req.param()
   const user = c.get('user')
-  const team = await c.env.DB.prepare('SELECT id FROM teams WHERE id = ? AND company_id = ?').bind(id, user.company_id).first()
+  const team = await c.env.DB.prepare('SELECT id FROM teams WHERE id = ? AND (company_id = ? OR ? IS NULL)').bind(id, user.company_id, user.company_id).first()
   if (!team) return c.json({ error: 'Forbidden' }, 403)
   await c.env.DB.prepare('DELETE FROM team_members WHERE team_id = ? AND user_id = ?').bind(id, userId).run()
   return c.json({ ok: true })

@@ -450,31 +450,31 @@ planning.post('/projects/:id/compute-cpm', requireAdmin, async (c) => {
 // ─────────────────────────────────────────────────────────────
 planning.post('/planning/batch-compute-cpm', requireAdmin, async (c) => {
   const user = c.get('user')
-  if (!user.company_id) return c.json({ error: 'No company_id on token — re-login required' }, 403)
+  const cid = user.company_id
 
-  // Tous les projets de cette entreprise ayant au moins 1 lot
+  // Tous les projets de l'entreprise ayant au moins 1 lot (super admin : tous)
   const projectsRes = await c.env.DB.prepare(`
     SELECT DISTINCT p.id, p.start_date, p.status
     FROM projects p
     INNER JOIN lots l ON l.project_id = p.id
-    WHERE p.company_id = ?
-  `).bind(user.company_id).all()
+    WHERE (p.company_id = ? OR ? IS NULL)
+  `).bind(cid, cid).all()
 
   const projects = projectsRes.results as any[]
   if (!projects.length) return c.json({ ok: true, processed: 0, message: 'Aucun projet avec lots' })
 
-  // Charger tous les lots via JOIN (filtré par company_id)
+  // Charger tous les lots via JOIN
   const lotsRes = await c.env.DB.prepare(`
     SELECT l.* FROM lots l
-    INNER JOIN projects p ON p.id = l.project_id AND p.company_id = ?
+    INNER JOIN projects p ON p.id = l.project_id AND (p.company_id = ? OR ? IS NULL)
     ORDER BY l.project_id, l.sort_order
-  `).bind(user.company_id).all()
+  `).bind(cid, cid).all()
 
   // Charger toutes les dépendances via JOIN
   const depsRes = await c.env.DB.prepare(`
     SELECT d.* FROM dependencies d
-    INNER JOIN projects p ON p.id = d.project_id AND p.company_id = ?
-  `).bind(user.company_id).all()
+    INNER JOIN projects p ON p.id = d.project_id AND (p.company_id = ? OR ? IS NULL)
+  `).bind(cid, cid).all()
 
   const allLots = lotsRes.results as unknown as (Lot & { project_id: string })[]
   const allDeps = depsRes.results as unknown as (Dependency & { project_id: string })[]

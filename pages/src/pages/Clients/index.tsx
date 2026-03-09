@@ -96,6 +96,8 @@ function ThSort({ label, col, sortKey, sortDir, onSort }: {
   )
 }
 
+type ViewMode = 'list' | 'cards'
+
 export default function Clients() {
   const t = useT()
   const navigate = useNavigate()
@@ -107,6 +109,13 @@ export default function Clients() {
   const [error, setError] = useState('')
   const [sortKey, setSortKey] = useState('name')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
+  const [viewMode, setViewMode] = useState<ViewMode>(() =>
+    (localStorage.getItem('planningIA_clients_view') as ViewMode) || 'list'
+  )
+  const changeView = (v: ViewMode) => {
+    setViewMode(v)
+    localStorage.setItem('planningIA_clients_view', v)
+  }
 
   const toggleSort = (col: string) => {
     if (sortKey === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
@@ -169,12 +178,33 @@ export default function Clients() {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">{t('clients.title')}</h1>
           <p className="text-sm text-gray-500 mt-0.5">{clients.length} {t('clients.projects_count')}</p>
         </div>
-        <button onClick={() => setModal(false)} className="btn btn-accent">+ {t('clients.new')}</button>
+        <div className="flex items-center gap-3">
+          {/* Toggle vue */}
+          <div className="flex items-center bg-gray-100 rounded-lg p-1 gap-0.5">
+            <button
+              onClick={() => changeView('cards')}
+              title="Vue vignettes"
+              className={`p-1.5 rounded-md transition-colors ${viewMode === 'cards' ? 'bg-white shadow text-indigo-700' : 'text-gray-500 hover:text-gray-700'}`}>
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M4 4h7v7H4V4zm0 9h7v7H4v-7zm9-9h7v7h-7V4zm0 9h7v7h-7v-7z" />
+              </svg>
+            </button>
+            <button
+              onClick={() => changeView('list')}
+              title="Vue liste"
+              className={`p-1.5 rounded-md transition-colors ${viewMode === 'list' ? 'bg-white shadow text-indigo-700' : 'text-gray-500 hover:text-gray-700'}`}>
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" />
+              </svg>
+            </button>
+          </div>
+          <button onClick={() => setModal(false)} className="btn btn-accent">+ {t('clients.new')}</button>
+        </div>
       </div>
 
       {/* Recherche */}
@@ -194,7 +224,34 @@ export default function Clients() {
           <p className="text-lg font-medium">{search ? t('clients.not_found') : t('clients.no_clients')}</p>
           {!search && <button onClick={() => setModal(false)} className="btn btn-primary mt-4">+ {t('clients.create_first')}</button>}
         </div>
+      ) : viewMode === 'cards' ? (
+        /* ── VUE VIGNETTES ── */
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          {displayed.map(c => (
+            <div
+              key={c.id}
+              onClick={() => navigate(`/clients/${c.id}`)}
+              className="card p-5 cursor-pointer hover:shadow-md transition-all hover:-translate-y-0.5">
+              <div className="flex items-start justify-between gap-2 mb-3">
+                <div className="min-w-0 flex-1">
+                  <h3 className="font-semibold text-gray-900 leading-tight truncate">{c.name}</h3>
+                  {c.city && <p className="text-sm text-gray-500 mt-0.5 truncate">📍 {c.city}</p>}
+                </div>
+                {c.project_count > 0 && (
+                  <span className="badge badge-blue flex-shrink-0">{c.project_count}</span>
+                )}
+              </div>
+              {c.email && <p className="text-xs text-gray-500 truncate mb-1">✉️ {c.email}</p>}
+              {c.phone && <p className="text-xs text-gray-500 truncate mb-3">📞 {c.phone}</p>}
+              <div className="flex gap-1 justify-end pt-2 border-t border-gray-100" onClick={e => e.stopPropagation()}>
+                <button onClick={() => setModal(c)} className="btn btn-ghost btn-sm text-xs">{t('common.edit')}</button>
+                <button onClick={() => handleDelete(c.id, c.name)} className="btn btn-ghost btn-sm text-red-500 text-xs">{t('common.delete')}</button>
+              </div>
+            </div>
+          ))}
+        </div>
       ) : (
+        /* ── VUE LISTE ── */
         <div className="card overflow-hidden">
           <table className="table">
             <thead>
@@ -223,14 +280,8 @@ export default function Clients() {
                   </td>
                   <td onClick={e => e.stopPropagation()}>
                     <div className="flex gap-1 justify-end">
-                      <button
-                        onClick={() => setModal(c)}
-                        className="btn btn-ghost btn-sm text-xs"
-                      >{t('common.edit')}</button>
-                      <button
-                        onClick={() => handleDelete(c.id, c.name)}
-                        className="btn btn-ghost btn-sm text-red-500 text-xs"
-                      >{t('common.delete')}</button>
+                      <button onClick={() => setModal(c)} className="btn btn-ghost btn-sm text-xs">{t('common.edit')}</button>
+                      <button onClick={() => handleDelete(c.id, c.name)} className="btn btn-ghost btn-sm text-red-500 text-xs">{t('common.delete')}</button>
                     </div>
                   </td>
                 </tr>

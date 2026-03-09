@@ -388,7 +388,7 @@ export default function ProjectDetail() {
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <div className="flex items-center gap-2 mb-1">
-            <Link to="/projects" className="text-sm text-gray-400 hover:text-gray-600">← {t('common.back')}</Link>
+            <button onClick={() => navigate(-1)} className="text-sm text-gray-400 hover:text-gray-600">← {t('common.back')}</button>
             {project.parent_project && (
               <>
                 <span className="text-gray-300 text-sm">·</span>
