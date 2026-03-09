@@ -516,6 +516,10 @@ export default function ProjectDetail() {
                   setTab('lots')
                   setLotModal({ lot, mode: 'edit' })
                 }
+              }}
+              onTaskClick={(task, parentLot) => {
+                const taskLot = lots.find((l: any) => l.id === parentLot.id)
+                setTaskModal({ lotId: parentLot.id, lotName: parentLot.name, initialTaskId: task.id, lot: taskLot || parentLot })
               }} />
           ) : (
             <div className="space-y-4">
@@ -601,7 +605,7 @@ export default function ProjectDetail() {
                             <path d="M18 6L6 18" stroke="white" strokeWidth="2.5" strokeLinecap="round"/>
                           </svg>
                         </button>
-                        <button onClick={() => setTaskModal({ lotId: l.id, lotName: l.name })}
+                        <button onClick={() => setTaskModal({ lotId: l.id, lotName: l.name, lot: l })}
                           className="btn btn-ghost btn-sm p-1 flex items-center gap-0.5" title="Sous-tâches">
                           <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none">
                             <rect x="8" y="2" width="8" height="7" rx="1.5" stroke="#7c3aed" strokeWidth="1.8"/>
@@ -773,6 +777,8 @@ export default function ProjectDetail() {
           onClose={() => setTaskModal(null)}
           onSave={handleSaveLotTask}
           onDelete={handleDeleteLotTask}
+          initialTaskId={taskModal.initialTaskId}
+          lot={taskModal.lot || lots.find((l: any) => l.id === taskModal.lotId)}
         />
       )}
 
@@ -1069,22 +1075,48 @@ const TASK_TYPES = [
   { value: 'custom', label: 'Autre', color: '#94a3b8' },
 ]
 
-function LotTasksModal({ lotId, lotName, tasks, users, onClose, onSave, onDelete }: any) {
+function LotTasksModal({ lotId, lotName, tasks, users, onClose, onSave, onDelete, initialTaskId, lot }: any) {
   const emptyForm = { name: '', type: 'custom', start_date: '', end_date: '', progress: 0, subcontractor_id: '', sort_order: tasks.length }
   const [form, setForm] = useState<any>(emptyForm)
   const [editingId, setEditingId] = useState<string | null>(null) // null = add mode
   const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const set = (k: string, v: any) => setForm((f: any) => ({ ...f, [k]: v }))
 
   const startEdit = (task: any) => {
     setEditingId(task.id)
+    setError(null)
     setForm({ name: task.name, type: task.type, start_date: task.start_date || '', end_date: task.end_date || '', progress: task.progress, subcontractor_id: task.subcontractor_id || '', sort_order: task.sort_order || 0 })
   }
 
-  const cancelEdit = () => { setEditingId(null); setForm(emptyForm) }
+  // Auto-ouvrir l'édition si on arrive depuis un clic direct sur la tâche
+  useEffect(() => {
+    if (initialTaskId) {
+      const task = tasks.find((t: any) => t.id === initialTaskId)
+      if (task) startEdit(task)
+    }
+  }, [initialTaskId])
+
+  const cancelEdit = () => { setEditingId(null); setForm(emptyForm); setError(null) }
+
+  // Calcul durée utilisée (hors tâche en cours d'édition)
+  const usedDays = tasks
+    .filter((t: any) => t.id !== editingId && t.start_date && t.end_date)
+    .reduce((sum: number, t: any) => sum + Math.max(0, Math.round((new Date(t.end_date).getTime() - new Date(t.start_date).getTime()) / 86400000)), 0)
+  const newTaskDays = (form.start_date && form.end_date)
+    ? Math.max(0, Math.round((new Date(form.end_date).getTime() - new Date(form.start_date).getTime()) / 86400000))
+    : 0
+  const totalUsed = usedDays + newTaskDays
+  const lotDuration = lot?.duration_days || null
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    setError(null)
+    // Validation : somme des durées ≤ durée du lot principal
+    if (lotDuration && form.start_date && form.end_date && totalUsed > lotDuration) {
+      setError(`Total sous-tâches : ${totalUsed}j > durée du lot (${lotDuration}j). Réduisez la durée.`)
+      return
+    }
     setSaving(true)
     const ok = await onSave(lotId, {
       name: form.name, type: form.type,
@@ -1134,9 +1166,25 @@ function LotTasksModal({ lotId, lotName, tasks, users, onClose, onSave, onDelete
           )}
 
           <form onSubmit={handleSubmit} className="bg-gray-50 rounded-lg border border-gray-200 p-4 space-y-3">
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
-              {editingId ? 'Modifier la sous-tâche' : 'Ajouter une sous-tâche'}
-            </p>
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                {editingId ? 'Modifier la sous-tâche' : 'Ajouter une sous-tâche'}
+              </p>
+              {lotDuration && (
+                <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                  totalUsed > lotDuration ? 'bg-red-100 text-red-700' :
+                  totalUsed === lotDuration ? 'bg-orange-100 text-orange-700' :
+                  'bg-gray-100 text-gray-500'
+                }`}>
+                  {totalUsed}/{lotDuration}j
+                </span>
+              )}
+            </div>
+            {error && (
+              <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2">
+                ⚠ {error}
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-3">
               <div className="field col-span-2">
                 <label className="label text-xs">Nom *</label>

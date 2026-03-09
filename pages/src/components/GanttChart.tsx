@@ -53,6 +53,7 @@ interface Props {
   lotAssignments?: Record<string, LotAssignment[]>  // keyed by lot_id, all zoom levels
   highlightedLotIds?: Set<string>            // lots à mettre en valeur (vue utilisateur)
   onLotClick?: (lotId: string) => void       // clic simple sur un lot → fiche
+  onTaskClick?: (task: LotTask, parentLot: Lot) => void  // clic sur une sous-tâche → édition directe
 }
 
 interface DragState {
@@ -126,9 +127,10 @@ function computeCascade(
   })
 }
 
-export default function GanttChart({ lots, deps, projectStartDate, lang = 'fr', projectId, onRefresh, readOnly = false, milestones = [], onMilestoneClick, lotTasks = {}, lotAssignments = {}, highlightedLotIds = new Set<string>(), onLotClick }: Props) {
+export default function GanttChart({ lots, deps, projectStartDate, lang = 'fr', projectId, onRefresh, readOnly = false, milestones = [], onMilestoneClick, lotTasks = {}, lotAssignments = {}, highlightedLotIds = new Set<string>(), onLotClick, onTaskClick }: Props) {
   const t = useT()
   const [zoom, setZoom] = useState<Zoom>('week')
+  const [showSubTasks, setShowSubTasks] = useState(false)
   const [tooltip, setTooltip] = useState<{ lot: Lot; x: number; y: number } | null>(null)
   const [drag, setDrag] = useState<DragState | null>(null)
   const [saving, setSaving] = useState(false)
@@ -165,19 +167,42 @@ export default function GanttChart({ lots, deps, projectStartDate, lang = 'fr', 
     : Math.ceil(totalDays / 30) + 1
   const totalW = cols * colW
 
-  // When zoom is day/week, sub-tasks expand each lot row
-  const showTasks = zoom === 'day' || zoom === 'week'
-  function lotRowH(lotId: string): number {
-    const asgns = lotAssignments[lotId] || []
-    const tasks = showTasks ? (lotTasks[lotId] || []) : []
-    const extra = asgns.length * (ASGN_H + ASGN_GAP) + tasks.length * (TASK_H + TASK_GAP)
-    if (extra === 0) return ROW_H
-    return ROW_H + extra + 4
+  // --- Flat render list : lots + sous-tâches comme lignes indépendantes ---
+  const TASK_ROW_H = 26  // hauteur d'une ligne sous-tâche
+
+  type RenderItem =
+    | { kind: 'lot'; lot: Lot }
+    | { kind: 'task'; task: LotTask; parentLot: Lot }
+
+  const renderItems: RenderItem[] = []
+  lots.forEach(lot => {
+    renderItems.push({ kind: 'lot', lot })
+    if (showSubTasks) {
+      const tasks = lotTasks[lot.id] || []
+      tasks.forEach(task => renderItems.push({ kind: 'task', task, parentLot: lot }))
+    }
+  })
+
+  function itemH(item: RenderItem): number {
+    if (item.kind === 'task') return TASK_ROW_H
+    const asgns = lotAssignments[item.lot.id] || []
+    const extra = asgns.length * (ASGN_H + ASGN_GAP)
+    return extra === 0 ? ROW_H : ROW_H + extra + 4
   }
-  function lotRowY(idx: number): number {
-    return lots.slice(0, idx).reduce((acc, l) => acc + lotRowH(l.id), 0)
+
+  function itemY(itemIdx: number): number {
+    let y = 0
+    for (let i = 0; i < itemIdx; i++) y += itemH(renderItems[i])
+    return y
   }
-  const totalH = lots.reduce((acc, l) => acc + lotRowH(l.id), 0)
+
+  // Lot Y lookup (for dep arrows)
+  function lotY(lotId: string): number {
+    const idx = renderItems.findIndex(it => it.kind === 'lot' && it.lot.id === lotId)
+    return idx >= 0 ? itemY(idx) : 0
+  }
+
+  const totalH = renderItems.reduce((acc, item) => acc + itemH(item), 0)
   // Keep a ref of current render's calculated values so async export can read them after a zoom change
   const calcRef = useRef({ colW, cols, totalW, totalH })
   calcRef.current = { colW, cols, totalW, totalH }
@@ -198,13 +223,13 @@ export default function GanttChart({ lots, deps, projectStartDate, lang = 'fr', 
 
   // Build position map for dep arrows (follows dragged bar live)
   const lotMap: Record<string, { x: number; y: number; w: number }> = {}
-  lots.forEach((l, i) => {
+  lots.forEach(l => {
     const isActive = drag?.lotId === l.id
     const effectiveStart = isActive && drag!.mode === 'move' ? l.early_start + drag!.deltaDays : l.early_start
     const effectiveDuration = isActive && drag!.mode === 'resize'
       ? Math.max(1, l.duration_days + drag!.deltaDays)
       : l.duration_days
-    lotMap[l.id] = { x: dayToX(effectiveStart), y: lotRowY(i) + ROW_H / 2, w: durationToW(effectiveDuration) }
+    lotMap[l.id] = { x: dayToX(effectiveStart), y: lotY(l.id) + ROW_H / 2, w: durationToW(effectiveDuration) }
   })
 
   // Global mouse handlers — only active during drag
@@ -370,6 +395,20 @@ export default function GanttChart({ lots, deps, projectStartDate, lang = 'fr', 
             {t(`planning.zoom_${z}` as any)}
           </button>
         ))}
+        <div className="flex items-center border-l border-gray-200 pl-2 ml-1">
+          <button
+            onClick={() => setShowSubTasks(v => !v)}
+            className={`btn btn-sm flex items-center gap-1.5 text-xs ${showSubTasks ? 'btn-primary' : 'btn-ghost'}`}
+            title={showSubTasks ? 'Masquer les sous-tâches' : 'Afficher les sous-tâches'}
+          >
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.8">
+              <rect x="1" y="1" width="10" height="3.5" rx="1" />
+              <rect x="3" y="7.5" width="8" height="3" rx="1" opacity="0.6" />
+            </svg>
+            <span>Sous-tâches</span>
+            <span className="text-[10px] opacity-70">{showSubTasks ? '▲' : '▼'}</span>
+          </button>
+        </div>
         {!readOnly && (
           <div className="flex items-center gap-1 border-l border-gray-200 pl-2 ml-1">
             <span className="text-xs text-gray-400 mr-1">PDF :</span>
@@ -425,13 +464,44 @@ export default function GanttChart({ lots, deps, projectStartDate, lang = 'fr', 
             <div style={{ height: 40 }} className="border-b border-gray-200 flex items-center px-3">
               <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Lot</span>
             </div>
-            {lots.map((l) => {
+            {renderItems.map((item, itemIdx) => {
+              const rh = itemH(item)
+              if (item.kind === 'task') {
+                // ── Ligne sous-tâche ──
+                const taskColors: Record<string, string> = { commande: '#6366f1', execution: '#f97316', livraison: '#22c55e', custom: '#94a3b8' }
+                const tc = taskColors[item.task.type] || '#94a3b8'
+                const parentTasks = lotTasks[item.parentLot.id] || []
+                const isLast = parentTasks[parentTasks.length - 1]?.id === item.task.id
+                const cc = item.parentLot.color
+                return (
+                  <div key={item.task.id} style={{ height: rh, position: 'relative' }}
+                    className={`border-b border-gray-100 bg-indigo-50/30 flex items-center${onTaskClick ? ' cursor-pointer hover:bg-indigo-50/60 group' : ''}`}
+                    onClick={onTaskClick ? () => onTaskClick(item.task, item.parentLot) : undefined}
+                    title={onTaskClick ? `Modifier : ${item.task.name}` : undefined}>
+                    {/* Connecteur arbre — ligne verticale (s'arrête à mi-hauteur pour le dernier) */}
+                    <div style={{ position: 'absolute', left: 18, top: 0, bottom: isLast ? '50%' : 0, width: 0, borderLeft: `1.5px dashed ${cc}`, opacity: 0.55, pointerEvents: 'none' }} />
+                    {/* Connecteur arbre — branche horizontale */}
+                    <div style={{ position: 'absolute', left: 18, top: '50%', marginTop: -1, width: 9, height: 0, borderTop: `1.5px dashed ${cc}`, opacity: 0.55, pointerEvents: 'none' }} />
+                    <div className="flex items-center gap-1.5 pl-8 pr-2 w-full">
+                      <span style={{ color: tc, fontSize: 8, flexShrink: 0 }}>◆</span>
+                      <span className="truncate flex-1" style={{ fontSize: 9, color: tc, fontWeight: 700 }}>{item.task.name}</span>
+                      {item.task.progress > 0 && <span style={{ fontSize: 8, color: '#6b7280', flexShrink: 0 }}>{item.task.progress}%</span>}
+                      {onTaskClick && <span className="opacity-0 group-hover:opacity-60 text-indigo-400 flex-shrink-0" style={{ fontSize: 9 }}>✎</span>}
+                    </div>
+                  </div>
+                )
+              }
+              // ── Ligne lot ──
+              const l = item.lot
               const asgns = lotAssignments[l.id] || []
-              const tasks = showTasks ? (lotTasks[l.id] || []) : []
-              const rh = lotRowH(l.id)
+              const hasVisibleTasks = showSubTasks && (lotTasks[l.id] || []).length > 0
               return (
-                <div key={l.id} style={{ height: rh }}
+                <div key={l.id} style={{ height: rh, position: 'relative' }}
                   className={`border-b border-gray-100 hover:bg-gray-50 cursor-default${l.parent_lot_id ? ' bg-gray-50/70' : ''}${highlightedLotIds.has(l.id) ? ' border-l-4 border-l-accent-500 bg-accent-50/40' : ''}`}>
+                  {/* Tige descendante vers les sous-tâches */}
+                  {hasVisibleTasks && (
+                    <div style={{ position: 'absolute', left: 18, top: '50%', bottom: 0, width: 0, borderLeft: `1.5px dashed ${l.color}`, opacity: 0.55, pointerEvents: 'none' }} />
+                  )}
                   <div style={{ height: ROW_H, paddingLeft: highlightedLotIds.has(l.id) ? (l.parent_lot_id ? 16 : 8) : (l.parent_lot_id ? 20 : 12) }} className="flex items-center gap-2 pr-3">
                     {l.parent_lot_id && <span className="text-gray-300 flex-shrink-0" style={{ fontSize: 10 }}>↳</span>}
                     <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: l.color }} />
@@ -444,13 +514,6 @@ export default function GanttChart({ lots, deps, projectStartDate, lang = 'fr', 
                       className="flex items-center px-3 gap-1">
                       <span style={{ fontSize: 9, color: ASGN_COLORS[ai % ASGN_COLORS.length] }}>◉</span>
                       <span className="text-gray-600 truncate" style={{ fontSize: 9 }}>{asgn.subcontractor_name}</span>
-                    </div>
-                  ))}
-                  {tasks.map(task => (
-                    <div key={task.id} style={{ height: TASK_H, marginBottom: TASK_GAP }}
-                      className="flex items-center px-3 gap-1">
-                      <span className="text-gray-400" style={{ fontSize: 9 }}>└</span>
-                      <span className="text-gray-500 truncate" style={{ fontSize: 9 }}>{task.name}</span>
                     </div>
                   ))}
                 </div>
@@ -487,9 +550,9 @@ export default function GanttChart({ lots, deps, projectStartDate, lang = 'fr', 
                 }} />
               ))}
               {/* Row backgrounds */}
-              {lots.map((l, i) => (
-                <div key={i} style={{ position: 'absolute', left: 0, top: lotRowY(i), width: '100%', height: lotRowH(l.id) }}
-                  className={i % 2 === 0 ? 'bg-transparent' : 'bg-gray-50/50'} />
+              {renderItems.map((item, i) => (
+                <div key={i} style={{ position: 'absolute', left: 0, top: itemY(i), width: '100%', height: itemH(item) }}
+                  className={item.kind === 'task' ? 'bg-indigo-50/20' : (i % 2 === 0 ? 'bg-transparent' : 'bg-gray-50/50')} />
               ))}
 
               {/* Dependency arrows */}
@@ -551,6 +614,48 @@ export default function GanttChart({ lots, deps, projectStartDate, lang = 'fr', 
                     </g>
                   )
                 })}
+                {/* ── Connecteurs lot parent → sous-tâches (SVG chart area) ── */}
+                {showSubTasks && lots.map(lot => {
+                  const tasks = lotTasks[lot.id] || []
+                  if (!tasks.length) return null
+                  const lotIdx = renderItems.findIndex(it => it.kind === 'lot' && it.lot.id === lot.id)
+                  if (lotIdx < 0) return null
+                  const isDraggedLot = drag?.lotId === lot.id && drag.mode === 'move'
+                  const lotEffStart = lot.early_start + (isDraggedLot ? drag!.deltaDays : 0)
+                  // connX positionné À L'INTÉRIEUR de la barre parent (+16px)
+                  // → la branche horizontale est toujours visible même si la sous-tâche démarre au même endroit
+                  const connX = dayToX(lotEffStart) + 16
+                  const barTop = itemY(lotIdx) + (lot.parent_lot_id ? 10 : 8)
+                  const barBottom = barTop + (lot.parent_lot_id ? 22 : 28)
+                  let lastTaskIdx = -1
+                  renderItems.forEach((it, idx) => { if (it.kind === 'task' && it.parentLot.id === lot.id) lastTaskIdx = idx })
+                  if (lastTaskIdx < 0) return null
+                  const lastTaskMidY = itemY(lastTaskIdx) + 4 + (TASK_ROW_H - 8) / 2
+                  return (
+                    <g key={`conn-${lot.id}`}>
+                      {/* Spine verticale : du bas de la barre parent jusqu'à la dernière sous-tâche */}
+                      <line x1={connX} y1={barBottom} x2={connX} y2={lastTaskMidY}
+                        stroke={lot.color} strokeWidth="1.5" strokeDasharray="3 2" opacity="0.6" />
+                      {/* Branche horizontale vers chaque barre de sous-tâche */}
+                      {tasks.map(task => {
+                        const tIdx = renderItems.findIndex(it => it.kind === 'task' && it.task.id === task.id)
+                        if (tIdx < 0) return null
+                        const tMidY = itemY(tIdx) + 4 + (TASK_ROW_H - 8) / 2
+                        const tBarX = dayToX(
+                          (task.start_date ? daysBetween(startDate, task.start_date) : lot.early_start) + (isDraggedLot ? drag!.deltaDays : 0)
+                        )
+                        // min→max : fonctionne dans les 2 sens (tâche avant ou après le connX)
+                        const bx1 = Math.min(connX, tBarX)
+                        const bx2 = Math.max(connX, tBarX)
+                        return (
+                          <line key={`branch-${task.id}`}
+                            x1={bx1} y1={tMidY} x2={bx2} y2={tMidY}
+                            stroke={lot.color} strokeWidth="1.5" strokeDasharray="3 2" opacity="0.6" />
+                        )
+                      })}
+                    </g>
+                  )
+                })}
                 <defs>
                   <marker id="arrow" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto">
                     <path d="M0,0 L0,6 L6,3 z" fill="#94a3b8" />
@@ -558,8 +663,51 @@ export default function GanttChart({ lots, deps, projectStartDate, lang = 'fr', 
                 </defs>
               </svg>
 
-              {/* Bars */}
-              {lots.map((l, i) => {
+              {/* Bars — renderItems (lots + sous-tâches comme lignes indépendantes) */}
+              {renderItems.map((item, itemIdx) => {
+                const y = itemY(itemIdx)
+                const rh = itemH(item)
+
+                // ── Ligne sous-tâche ──────────────────────────────────────────────
+                if (item.kind === 'task') {
+                  const task = item.task
+                  const pl = item.parentLot
+                  // Positionnement relatif : les sous-tâches suivent le lot parent lors d'un glisser
+                  const isParentDragged = drag?.lotId === pl.id && drag.mode === 'move'
+                  const parentDelta = isParentDragged ? drag!.deltaDays : 0
+                  const taskStart = (task.start_date ? daysBetween(startDate, task.start_date) : pl.early_start) + parentDelta
+                  const taskEnd = (task.end_date ? daysBetween(startDate, task.end_date) : pl.early_finish) + parentDelta
+                  const tx = dayToX(taskStart)
+                  const tw = Math.max(durationToW(taskEnd - taskStart), 24)
+                  const taskBarH = TASK_ROW_H - 8
+                  const taskColors: Record<string, string> = { commande: '#6366f1', execution: pl.color, livraison: '#22c55e', custom: '#94a3b8' }
+                  const tc = taskColors[task.type] || '#94a3b8'
+                  const pW = task.progress > 0 ? Math.max((tw * task.progress) / 100, 0) : 0
+                  return (
+                    <div key={task.id}
+                      style={{ position: 'absolute', top: y, left: 0, width: '100%', height: rh }}>
+                      {/* fond pastel */}
+                      <div style={{ position: 'absolute', left: tx, top: 4, width: tw, height: taskBarH, backgroundColor: tc, opacity: 0.45, borderRadius: 4, pointerEvents: 'none' }} />
+                      {/* avancement vivid */}
+                      {pW > 0 && (
+                        <div style={{ position: 'absolute', left: tx, top: 4, width: pW, height: taskBarH, backgroundColor: tc, opacity: 0.85, borderRadius: '4px 0 0 4px', pointerEvents: 'none' }} />
+                      )}
+                      {/* label + zone cliquable */}
+                      <div
+                        style={{ position: 'absolute', left: tx, top: 4, width: tw, height: taskBarH, paddingLeft: 5, display: 'flex', alignItems: 'center', cursor: onTaskClick ? 'pointer' : 'default', borderRadius: 4 }}
+                        onClick={onTaskClick ? () => onTaskClick(task, pl) : undefined}
+                        title={onTaskClick ? `Modifier : ${task.name}` : task.name}
+                      >
+                        <span style={{ color: '#111827', fontSize: 9, fontWeight: 700, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
+                          {task.name}{task.progress > 0 ? ` ${task.progress}%` : ''}
+                        </span>
+                      </div>
+                    </div>
+                  )
+                }
+
+                // ── Ligne lot ─────────────────────────────────────────────────────
+                const l = item.lot
                 const isDragged = drag?.lotId === l.id
                 const effectiveStart = isDragged && drag!.mode === 'move' ? l.early_start + drag!.deltaDays : l.early_start
                 const effectiveDuration = isDragged && drag!.mode === 'resize'
@@ -567,45 +715,36 @@ export default function GanttChart({ lots, deps, projectStartDate, lang = 'fr', 
                   : l.duration_days
                 const x = dayToX(effectiveStart)
                 const w = durationToW(effectiveDuration)
-                const y = lotRowY(i)
-                const rh = lotRowH(l.id)
                 const progressW = w * (l.progress_percent / 100)
                 const asgns = lotAssignments[l.id] || []
-                const tasks = showTasks ? (lotTasks[l.id] || []) : []
 
                 return (
                   <div key={l.id}
                     style={{ position: 'absolute', top: y, left: 0, width: '100%', height: rh }}
                     onMouseEnter={!drag ? (e) => setTooltip({ lot: l, x: e.clientX, y: e.clientY }) : undefined}
                     onMouseLeave={!drag ? () => setTooltip(null) : undefined}>
-                    {/* ── Couche 1 : fond pastel (opacity isolée, ne cascade pas) ── */}
-                    <div
-                      style={{
-                        position: 'absolute', left: x, top: l.parent_lot_id ? 10 : 8,
-                        height: l.parent_lot_id ? 22 : 28, width: w,
-                        backgroundColor: l.color,
-                        opacity: isDragged ? 0.45 : (l.status === 'done' ? 0.15 : l.is_provisional ? 0.12 : 0.22),
-                        borderRadius: 6,
-                        pointerEvents: 'none',
-                        backgroundImage: l.is_provisional && !isDragged
-                          ? 'repeating-linear-gradient(45deg, transparent, transparent 5px, rgba(255,255,255,0.35) 5px, rgba(255,255,255,0.35) 10px)'
-                          : undefined,
-                      }}
-                    />
-                    {/* ── Couche 2 : avancement vivid ─────────────────────────────── */}
+                    {/* ── Couche 1 : fond pastel ── */}
+                    <div style={{
+                      position: 'absolute', left: x, top: l.parent_lot_id ? 10 : 8,
+                      height: l.parent_lot_id ? 22 : 28, width: w,
+                      backgroundColor: l.color,
+                      opacity: isDragged ? 0.65 : (l.status === 'done' ? 0.28 : l.is_provisional ? 0.22 : 0.38),
+                      borderRadius: 6, pointerEvents: 'none',
+                      backgroundImage: l.is_provisional && !isDragged
+                        ? 'repeating-linear-gradient(45deg, transparent, transparent 5px, rgba(255,255,255,0.35) 5px, rgba(255,255,255,0.35) 10px)'
+                        : undefined,
+                    }} />
+                    {/* ── Couche 2 : avancement vivid ── */}
                     {l.progress_percent > 0 && (
-                      <div
-                        style={{
-                          position: 'absolute', left: x, top: l.parent_lot_id ? 10 : 8,
-                          height: l.parent_lot_id ? 22 : 28, width: progressW,
-                          backgroundColor: l.color,
-                          opacity: isDragged ? 0.65 : (l.status === 'done' ? 0.45 : 0.82),
-                          borderRadius: '6px 0 0 6px',
-                          pointerEvents: 'none',
-                        }}
-                      />
+                      <div style={{
+                        position: 'absolute', left: x, top: l.parent_lot_id ? 10 : 8,
+                        height: l.parent_lot_id ? 22 : 28, width: progressW,
+                        backgroundColor: l.color,
+                        opacity: isDragged ? 0.65 : (l.status === 'done' ? 0.45 : 0.82),
+                        borderRadius: '6px 0 0 6px', pointerEvents: 'none',
+                      }} />
                     )}
-                    {/* ── Couche 3 : interaction + label (fond transparent) ────────── */}
+                    {/* ── Couche 3 : interaction + label ── */}
                     <div
                       draggable={false}
                       style={{
@@ -616,17 +755,10 @@ export default function GanttChart({ lots, deps, projectStartDate, lang = 'fr', 
                         boxShadow: isDragged ? '0 4px 16px rgba(0,0,0,0.25)' : undefined,
                       }}
                       className={l.is_critical && !isDragged ? 'ring-2 ring-red-400 ring-offset-0' : ''}
-                      onClick={(e) => {
-                        // Ne déclencher onLotClick que si c'était un vrai clic (pas un drag)
-                        if (!didDragRef.current) {
-                          onLotClick?.(l.id)
-                        }
-                      }}
+                      onClick={() => { if (!didDragRef.current) onLotClick?.(l.id) }}
                       onMouseDown={canDrag ? (e) => {
-                        e.preventDefault()
-                        e.stopPropagation()
-                        didDragRef.current = false  // réinitialise à chaque mousedown
-                        setTooltip(null)
+                        e.preventDefault(); e.stopPropagation()
+                        didDragRef.current = false; setTooltip(null)
                         const area = chartAreaRef.current
                         if (!area) return
                         const rect = area.getBoundingClientRect()
@@ -636,57 +768,26 @@ export default function GanttChart({ lots, deps, projectStartDate, lang = 'fr', 
                           : zoom === 'week' ? (mouseChartX / colW) * 7
                           : (mouseChartX / colW) * 30
                         const offsetDays = Math.max(0, Math.min(clickDay - l.early_start, l.duration_days))
-                        setDrag({
-                          lotId: l.id,
-                          mode: 'move',
-                          originalStart: l.early_start,
-                          originalEnd: l.early_finish,
-                          originalDuration: l.duration_days,
-                          offsetDays,
-                          deltaDays: 0,
-                          mouseX: e.clientX,
-                          mouseY: e.clientY,
-                        })
+                        setDrag({ lotId: l.id, mode: 'move', originalStart: l.early_start, originalEnd: l.early_finish, originalDuration: l.duration_days, offsetDays, deltaDays: 0, mouseX: e.clientX, mouseY: e.clientY })
                       } : undefined}
                     >
                       <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', paddingLeft: 8 }}>
-                        <span style={{ color: 'white', fontSize: 11, fontWeight: 700, textShadow: '0 1px 3px rgba(0,0,0,0.75)', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
+                        <span style={{ color: '#111827', fontSize: 11, fontWeight: 800, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
                           {l.code} {l.progress_percent > 0 ? `${l.progress_percent}%` : ''}
                         </span>
                       </div>
-
-                      {/* Resize handle — right edge strip */}
                       {canDrag && (
-                        <div
-                          title="Redimensionner"
-                          style={{
-                            position: 'absolute', right: 0, top: 0, bottom: 0, width: 8,
-                            cursor: 'col-resize',
-                            borderRadius: '0 6px 6px 0',
-                            backgroundColor: 'rgba(0,0,0,0.20)',
-                            zIndex: 1,
-                          }}
+                        <div title="Redimensionner"
+                          style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 8, cursor: 'col-resize', borderRadius: '0 6px 6px 0', backgroundColor: 'rgba(0,0,0,0.20)', zIndex: 1 }}
                           onMouseDown={(e) => {
-                            e.preventDefault()
-                            e.stopPropagation()
-                            setTooltip(null)
-                            setDrag({
-                              lotId: l.id,
-                              mode: 'resize',
-                              originalStart: l.early_start,
-                              originalEnd: l.early_finish,
-                              originalDuration: l.duration_days,
-                              offsetDays: 0,
-                              deltaDays: 0,
-                              mouseX: e.clientX,
-                              mouseY: e.clientY,
-                            })
+                            e.preventDefault(); e.stopPropagation(); setTooltip(null)
+                            setDrag({ lotId: l.id, mode: 'resize', originalStart: l.early_start, originalEnd: l.early_finish, originalDuration: l.duration_days, offsetDays: 0, deltaDays: 0, mouseX: e.clientX, mouseY: e.clientY })
                           }}
                         />
                       )}
                     </div>
 
-                    {/* Assignment sub-rows (all zoom levels) */}
+                    {/* Assignment sub-bars */}
                     {asgns.map((asgn, ai) => {
                       const asgnStart = asgn.start_date ? daysBetween(startDate, asgn.start_date) : effectiveStart
                       const asgnEnd = asgn.end_date ? daysBetween(startDate, asgn.end_date) : effectiveStart + effectiveDuration
@@ -698,40 +799,14 @@ export default function GanttChart({ lots, deps, projectStartDate, lang = 'fr', 
                         <div key={asgn.id}
                           title={`${asgn.subcontractor_name}${asgn.company_name ? ' · ' + asgn.company_name : ''}${asgn.progress > 0 ? ' · ' + asgn.progress + '%' : ''}`}
                           style={{ position: 'absolute', left: ax, top: ay, width: aw, height: ASGN_H }}>
-                          {/* fond pastel */}
                           <div style={{ position: 'absolute', inset: 0, backgroundColor: ac, opacity: 0.22, borderRadius: 4, pointerEvents: 'none' }} />
-                          {/* progression vivid */}
                           {asgn.progress > 0 && (
                             <div style={{ position: 'absolute', left: 0, top: 0, width: `${asgn.progress}%`, height: '100%', backgroundColor: ac, opacity: 0.82, borderRadius: '4px 0 0 4px', pointerEvents: 'none' }} />
                           )}
-                          {/* label */}
                           <div style={{ position: 'absolute', inset: 0, paddingLeft: 5, display: 'flex', alignItems: 'center' }}>
-                            <span style={{ color: 'white', fontSize: 9, fontWeight: 700, textShadow: '0 1px 2px rgba(0,0,0,0.7)', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
+                            <span style={{ color: '#111827', fontSize: 9, fontWeight: 800, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
                               {asgn.subcontractor_name}
                             </span>
-                          </div>
-                        </div>
-                      )
-                    })}
-
-                    {/* Sub-task bars (day/week zoom only) */}
-                    {tasks.map((task, ti) => {
-                      const taskStart = task.start_date ? daysBetween(startDate, task.start_date) : effectiveStart
-                      const taskEnd = task.end_date ? daysBetween(startDate, task.end_date) : effectiveStart + effectiveDuration
-                      const tx = dayToX(taskStart)
-                      const tw = Math.max(durationToW(taskEnd - taskStart), 16)
-                      const ty = ROW_H + asgns.length * (ASGN_H + ASGN_GAP) + ti * (TASK_H + TASK_GAP) + 2
-                      const taskColors: Record<string, string> = { commande: '#6366f1', execution: l.color, livraison: '#22c55e', custom: '#94a3b8' }
-                      const tc = taskColors[task.type] || '#94a3b8'
-                      return (
-                        <div key={task.id} style={{ position: 'absolute', left: tx, top: ty, width: tw, height: TASK_H,
-                          backgroundColor: tc, opacity: 0.75, borderRadius: 3 }}
-                          title={`${task.name}${task.subcontractor_name ? ' · ' + task.subcontractor_name : ''}`}>
-                          {task.progress > 0 && (
-                            <div style={{ width: `${task.progress}%`, height: '100%', backgroundColor: 'rgba(0,0,0,0.25)', borderRadius: '3px 0 0 3px' }} />
-                          )}
-                          <div style={{ position: 'absolute', inset: 0, paddingLeft: 4, display: 'flex', alignItems: 'center' }}>
-                            <span style={{ color: 'white', fontSize: 9, fontWeight: 600, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>{task.name}</span>
                           </div>
                         </div>
                       )
