@@ -84,6 +84,7 @@ export default function UnifiedPlanning() {
   const navigate = useNavigate()
   const scrollRef = useRef<HTMLDivElement>(null)
   const leftColRef = useRef<HTMLDivElement>(null)
+  const ganttContainerRef = useRef<HTMLDivElement>(null)
   const isSyncingScroll = useRef(false)
 
   const [projects, setProjects] = useState<any[]>([])
@@ -92,6 +93,8 @@ export default function UnifiedPlanning() {
   const [zoom, setZoom]         = useState<'month' | 'week'>('month')
   const [search, setSearch]     = useState('')
   const [filterStatus, setFilterStatus] = useState('')
+  const [filterLots, setFilterLots]     = useState<'with_lots' | 'no_lots' | ''>('')
+  const [exporting, setExporting]       = useState(false)
 
   useEffect(() => {
     api.planning.unified().then(setProjects).finally(() => setLoading(false))
@@ -101,13 +104,58 @@ export default function UnifiedPlanning() {
   const filtered = useMemo(() =>
     projects
       .filter(p => !filterStatus || p.status === filterStatus)
+      .filter(p => !filterLots || (filterLots === 'with_lots' ? (p.lot_count || 0) > 0 : (p.lot_count || 0) === 0))
       .filter(p => !search ||
         p.name?.toLowerCase().includes(search.toLowerCase()) ||
         (p.city || '').toLowerCase().includes(search.toLowerCase()) ||
         (p.reference || '').toLowerCase().includes(search.toLowerCase())
       ),
-    [projects, filterStatus, search]
+    [projects, filterStatus, filterLots, search]
   )
+
+  // Export PDF (html2canvas sur le container Gantt)
+  const exportPDF = async (format: 'A4' | 'A3') => {
+    if (exporting || !ganttContainerRef.current) return
+    setExporting(true)
+    try {
+      const el = ganttContainerRef.current
+      const leftDiv  = el.querySelector<HTMLElement>('.flex-shrink-0.flex-col')
+      const rightDiv = el.querySelector<HTMLElement>('.flex-1.overflow-auto')
+      const prevElOverflow = el.style.overflow
+      const prevElHeight   = el.style.height
+      const prevRightW     = rightDiv?.style.width || ''
+      if (leftDiv)  leftDiv.style.overflowY  = 'visible'
+      if (rightDiv) { rightDiv.style.overflowX = 'visible'; rightDiv.style.overflowY = 'visible'; rightDiv.style.width = totalWidth + 'px' }
+      el.style.overflow = 'visible'
+      el.style.height   = 'auto'
+      const [{ default: html2canvas }, { default: jsPDF }] = await Promise.all([
+        import('html2canvas'),
+        import('jspdf'),
+      ])
+      const canvas = await html2canvas(el, { scale: 2, useCORS: true, logging: false })
+      if (leftDiv)  leftDiv.style.overflowY  = ''
+      if (rightDiv) { rightDiv.style.overflowX = ''; rightDiv.style.overflowY = ''; rightDiv.style.width = prevRightW }
+      el.style.overflow = prevElOverflow
+      el.style.height   = prevElHeight
+      const imgData = canvas.toDataURL('image/jpeg', 0.92)
+      const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: format.toLowerCase() as 'a4' | 'a3' })
+      const [pw, ph] = format === 'A4' ? [297, 210] : [420, 297]
+      const margin = 8
+      const maxW = pw - 2 * margin
+      const maxH = ph - 2 * margin
+      const imgW = canvas.width / 2
+      const imgH = canvas.height / 2
+      let finalW = maxW
+      let finalH = (imgH / imgW) * maxW
+      if (finalH > maxH) { finalH = maxH; finalW = (imgW / imgH) * maxH }
+      pdf.addImage(imgData, 'JPEG', margin, margin, finalW, finalH)
+      pdf.save(`planning_global_${format}_${new Date().toISOString().slice(0, 10)}.pdf`)
+    } catch (err) {
+      console.error('PDF export error:', err)
+    } finally {
+      setExporting(false)
+    }
+  }
 
   // Plage temporelle globale (avec marge +1 mois de chaque côté)
   const { rangeStart, rangeEnd } = useMemo(() => {
@@ -262,6 +310,30 @@ export default function UnifiedPlanning() {
             <option key={s} value={s}>{t(`projects.status.${s}` as any)}</option>
           ))}
         </select>
+        <select
+          className="input input-sm"
+          value={filterLots}
+          onChange={e => setFilterLots(e.target.value as any)}
+        >
+          <option value="">Tous les projets</option>
+          <option value="with_lots">📋 Avec lots</option>
+          <option value="no_lots">⬜ Sans lots</option>
+        </select>
+
+        {/* PDF */}
+        {view === 'gantt' && (
+          <div className="flex items-center gap-1">
+            <span className="text-xs text-gray-400">PDF :</span>
+            <button onClick={() => exportPDF('A4')} disabled={exporting}
+              className="btn btn-sm btn-ghost text-xs" title="Export PDF A4 paysage">
+              {exporting ? '⏳' : '🖨'} A4
+            </button>
+            <button onClick={() => exportPDF('A3')} disabled={exporting}
+              className="btn btn-sm btn-ghost text-xs" title="Export PDF A3 paysage">
+              {exporting ? '⏳' : '🖨'} A3
+            </button>
+          </div>
+        )}
 
         {/* Légende */}
         <div className="flex items-center gap-2 ml-auto flex-wrap">
@@ -349,7 +421,7 @@ export default function UnifiedPlanning() {
           {t('planning.no_results')}
         </div>
       ) : (
-        <div className="flex flex-1 overflow-hidden mt-2">
+        <div ref={ganttContainerRef} className="flex flex-1 overflow-hidden mt-2">
 
           {/* Colonne fixe gauche (noms) */}
           <div className="flex-shrink-0 flex flex-col border-r border-gray-200" style={{ width: LEFT_COL }}>
