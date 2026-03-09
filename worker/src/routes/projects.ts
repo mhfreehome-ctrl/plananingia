@@ -99,8 +99,8 @@ projects.get('/:id', requireAuth, async (c) => {
   const user = c.get('user')
   const proj = await c.env.DB.prepare('SELECT * FROM projects WHERE id = ?').bind(id).first<any>()
   if (!proj) return c.json({ error: 'Not found' }, 404)
-  // Vérif isolation company pour admin
-  if (user.role === 'admin' && user.company_id && proj.company_id !== user.company_id) {
+  // Vérif isolation company pour admin — exclure les projets MODELE globaux (company_id IS NULL)
+  if (user.role === 'admin' && user.company_id && proj.company_id && proj.company_id !== user.company_id) {
     return c.json({ error: 'Forbidden' }, 403)
   }
   if (user.role === 'subcontractor') {
