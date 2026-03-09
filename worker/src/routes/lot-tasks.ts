@@ -65,8 +65,9 @@ lotTasks.post('/lots/:id/tasks', requireAdmin, async (c) => {
   const body = await c.req.json()
   if (!body.name) return c.json({ error: 'name is required' }, 400)
   const tid = generateId('task')
+  const notes = body.notes ? String(body.notes).slice(0, 1500) : null
   await c.env.DB.prepare(
-    'INSERT INTO lot_tasks (id, lot_id, name, type, start_date, end_date, progress, subcontractor_id, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    'INSERT INTO lot_tasks (id, lot_id, name, type, start_date, end_date, progress, subcontractor_id, sort_order, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
   ).bind(
     tid, id,
     body.name,
@@ -75,7 +76,8 @@ lotTasks.post('/lots/:id/tasks', requireAdmin, async (c) => {
     body.end_date || null,
     body.progress || 0,
     body.subcontractor_id || null,
-    body.sort_order || 0
+    body.sort_order || 0,
+    notes
   ).run()
   const row = await c.env.DB.prepare('SELECT * FROM lot_tasks WHERE id = ?').bind(tid).first()
   return c.json(row, 201)
@@ -87,8 +89,9 @@ lotTasks.put('/lot-tasks/:id', requireAdmin, async (c) => {
   const user = c.get('user')
   if (!await assertTaskOwnership(c.env.DB, id, user.company_id)) return c.json({ error: 'Forbidden' }, 403)
   const body = await c.req.json()
+  const notes = body.notes !== undefined ? (body.notes ? String(body.notes).slice(0, 1500) : null) : undefined
   await c.env.DB.prepare(
-    'UPDATE lot_tasks SET name=?, type=?, start_date=?, end_date=?, progress=?, subcontractor_id=?, sort_order=? WHERE id=?'
+    'UPDATE lot_tasks SET name=?, type=?, start_date=?, end_date=?, progress=?, subcontractor_id=?, sort_order=?, notes=? WHERE id=?'
   ).bind(
     body.name,
     body.type || 'custom',
@@ -97,6 +100,7 @@ lotTasks.put('/lot-tasks/:id', requireAdmin, async (c) => {
     body.progress ?? 0,
     body.subcontractor_id || null,
     body.sort_order || 0,
+    notes ?? null,
     id
   ).run()
   const row = await c.env.DB.prepare('SELECT * FROM lot_tasks WHERE id = ?').bind(id).first()

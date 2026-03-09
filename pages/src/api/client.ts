@@ -66,6 +66,7 @@ export const api = {
     update: (id: string, data: any) => put(`/projects/${id}`, data),
     delete: (id: string) => del(`/projects/${id}`),
     stats: (id: string) => get<any>(`/projects/${id}/stats`),
+    duplicate: (id: string, name?: string) => post<any>(`/projects/${id}/duplicate`, name ? { name } : {}),
   },
   lots: {
     list: (projectId: string) => get<any[]>(`/projects/${projectId}/lots`),

@@ -352,10 +352,11 @@ lots.post('/projects/:id/lots', requireAdmin, async (c) => {
   }
   const body = await c.req.json()
   const lid = generateId('lot')
+  const lotNotes = body.notes ? String(body.notes).slice(0, 2000) : null
   await c.env.DB.prepare(
     'INSERT INTO lots (id, project_id, code, name, name_tr, duration_days, color, zone, notes, subcontractor_id, team_id, sort_order, market_deadline, is_provisional, parent_lot_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
   ).bind(lid, id, body.code, body.name, body.name_tr || null, body.duration_days || 10,
-    body.color || '#6B7280', body.zone || null, body.notes || null,
+    body.color || '#6B7280', body.zone || null, lotNotes,
     body.subcontractor_id || null, body.team_id || null,
     body.sort_order || 99,
     body.market_deadline || null, body.is_provisional ? 1 : 0, body.parent_lot_id || null).run()
@@ -413,7 +414,7 @@ lots.put('/lots/:id', requireAdmin, async (c) => {
       updated_at=datetime('now')
     WHERE id=?
   `).bind(body.code, body.name, body.name_tr || null, body.duration_days, body.color,
-    body.zone || null, body.notes || null,
+    body.zone || null, body.notes ? String(body.notes).slice(0, 2000) : null,
     body.subcontractor_id || null, body.team_id || null,
     body.sort_order || 0,
     body.market_deadline || null, body.is_provisional ? 1 : 0, body.parent_lot_id || null,

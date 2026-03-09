@@ -164,6 +164,74 @@ projects.delete('/:id', requireEditeur, async (c) => {
   return c.json({ ok: true })
 })
 
+// POST /api/projects/:id/duplicate — clone projet + lots + sous-tâches
+projects.post('/:id/duplicate', requireWrite, async (c) => {
+  const { id } = c.req.param()
+  const user = c.get('user')
+  if (user.company_id) {
+    const proj = await c.env.DB.prepare('SELECT company_id FROM projects WHERE id = ?').bind(id).first<any>()
+    if (!proj || proj.company_id !== user.company_id) return c.json({ error: 'Forbidden' }, 403)
+  }
+  const src = await c.env.DB.prepare('SELECT * FROM projects WHERE id = ?').bind(id).first<any>()
+  if (!src) return c.json({ error: 'Not found' }, 404)
+  const body = await c.req.json().catch(() => ({})) as any
+  const newId = generateId('proj')
+  const newName = body.name || `${src.name} (copie)`
+  await c.env.DB.prepare(`
+    INSERT INTO projects (id, name, reference, address, city, postal_code, client_name, client_email, client_phone,
+      client_id, description, start_date, duration_weeks, budget_ht, status, lot_types, meeting_time,
+      created_by, company_id, project_type)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,'draft',?,?,?,?,?)
+  `).bind(newId, newName, src.reference || null, src.address || null, src.city || null,
+    src.postal_code || null, src.client_name || null, src.client_email || null, src.client_phone || null,
+    src.client_id || null, src.description || null, src.start_date || null, src.duration_weeks || null,
+    src.budget_ht || null, src.lot_types || null, src.meeting_time || null,
+    user.sub, user.company_id || null, src.project_type || 'standalone').run()
+  // Cloner les lots (map id source → id clone pour recâbler)
+  const lots = await c.env.DB.prepare('SELECT * FROM lots WHERE project_id = ? ORDER BY sort_order').bind(id).all()
+  const lotIdMap: Record<string, string> = {}
+  for (const lot of lots.results as any[]) {
+    const newLotId = generateId('lot')
+    lotIdMap[lot.id] = newLotId
+    await c.env.DB.prepare(`
+      INSERT INTO lots (id, project_id, code, name, name_tr, duration_days, color, zone, notes,
+        subcontractor_id, team_id, sort_order, market_deadline, is_provisional,
+        early_start, early_finish, late_start, late_finish, total_float)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+    `).bind(newLotId, newId, lot.code, lot.name, lot.name_tr || null, lot.duration_days,
+      lot.color || '#6B7280', lot.zone || null, lot.notes || null,
+      null, null, lot.sort_order, lot.market_deadline || null, lot.is_provisional || 0,
+      lot.early_start || 0, lot.early_finish || 0, lot.late_start || 0, lot.late_finish || 0, lot.total_float || 0).run()
+    // Cloner les sous-tâches
+    const tasks = await c.env.DB.prepare('SELECT * FROM lot_tasks WHERE lot_id = ? ORDER BY sort_order').bind(lot.id).all()
+    for (const task of tasks.results as any[]) {
+      await c.env.DB.prepare(`
+        INSERT INTO lot_tasks (id, lot_id, name, type, start_date, end_date, progress, sort_order, notes)
+        VALUES (?,?,?,?,?,?,0,?,?)
+      `).bind(generateId('task'), newLotId, task.name, task.type || 'custom',
+        task.start_date || null, task.end_date || null, task.sort_order || 0, task.notes || null).run()
+    }
+  }
+  // Recâbler parent_lot_id pour les sous-lots
+  for (const lot of lots.results as any[]) {
+    if (lot.parent_lot_id && lotIdMap[lot.parent_lot_id]) {
+      await c.env.DB.prepare('UPDATE lots SET parent_lot_id=? WHERE id=?')
+        .bind(lotIdMap[lot.parent_lot_id], lotIdMap[lot.id]).run()
+    }
+  }
+  // Cloner les dépendances
+  const deps = await c.env.DB.prepare('SELECT * FROM dependencies WHERE project_id = ?').bind(id).all()
+  for (const dep of deps.results as any[]) {
+    if (lotIdMap[(dep as any).from_lot_id] && lotIdMap[(dep as any).to_lot_id]) {
+      await c.env.DB.prepare(`INSERT INTO dependencies (id, project_id, from_lot_id, to_lot_id, type, lag_days) VALUES (?,?,?,?,?,?)`)
+        .bind(generateId('dep'), newId, lotIdMap[(dep as any).from_lot_id], lotIdMap[(dep as any).to_lot_id],
+          (dep as any).type || 'FS', (dep as any).lag_days || 0).run()
+    }
+  }
+  const newProj = await c.env.DB.prepare('SELECT * FROM projects WHERE id = ?').bind(newId).first()
+  return c.json(newProj, 201)
+})
+
 projects.get('/:id/stats', requireAuth, async (c) => {
   const { id } = c.req.param()
   const user = c.get('user')

@@ -453,6 +453,9 @@ export default function ProjectDetail() {
           <button onClick={handleCPM} disabled={cpmLoading || !lots.length} className="btn btn-primary btn-sm">
             {cpmLoading ? t('planning.cpm_computing') : `📐 ${t('planning.compute_cpm')}`}
           </button>
+          <button onClick={() => navigate(`/projects/${id}/report`)} className="btn btn-ghost btn-sm" title="Rapport d'avancement PDF">
+            📄 Rapport
+          </button>
           <button onClick={() => setEditProjectModal(true)} className="btn btn-ghost btn-sm" title="Modifier la fiche projet">
             ✏️ Modifier
           </button>
@@ -1076,7 +1079,7 @@ const TASK_TYPES = [
 ]
 
 function LotTasksModal({ lotId, lotName, tasks, users, onClose, onSave, onDelete, initialTaskId, lot }: any) {
-  const emptyForm = { name: '', type: 'custom', start_date: '', end_date: '', progress: 0, subcontractor_id: '', sort_order: tasks.length }
+  const emptyForm = { name: '', type: 'custom', start_date: '', end_date: '', progress: 0, subcontractor_id: '', sort_order: tasks.length, notes: '' }
   const [form, setForm] = useState<any>(emptyForm)
   const [editingId, setEditingId] = useState<string | null>(null) // null = add mode
   const [saving, setSaving] = useState(false)
@@ -1086,7 +1089,7 @@ function LotTasksModal({ lotId, lotName, tasks, users, onClose, onSave, onDelete
   const startEdit = (task: any) => {
     setEditingId(task.id)
     setError(null)
-    setForm({ name: task.name, type: task.type, start_date: task.start_date || '', end_date: task.end_date || '', progress: task.progress, subcontractor_id: task.subcontractor_id || '', sort_order: task.sort_order || 0 })
+    setForm({ name: task.name, type: task.type, start_date: task.start_date || '', end_date: task.end_date || '', progress: task.progress, subcontractor_id: task.subcontractor_id || '', sort_order: task.sort_order || 0, notes: task.notes || '' })
   }
 
   // Auto-ouvrir l'édition si on arrive depuis un clic direct sur la tâche
@@ -1122,7 +1125,8 @@ function LotTasksModal({ lotId, lotName, tasks, users, onClose, onSave, onDelete
       name: form.name, type: form.type,
       start_date: form.start_date || null, end_date: form.end_date || null,
       progress: Number(form.progress), subcontractor_id: form.subcontractor_id || null,
-      sort_order: Number(form.sort_order)
+      sort_order: Number(form.sort_order),
+      notes: form.notes ? form.notes.slice(0, 1500) : null
     }, editingId || undefined)
     setSaving(false)
     if (ok) { setEditingId(null); setForm({ ...emptyForm, sort_order: tasks.length + 1 }) }
@@ -1154,6 +1158,9 @@ function LotTasksModal({ lotId, lotName, tasks, users, onClose, onSave, onDelete
                         {task.progress > 0 ? ` · ${task.progress}%` : ''}
                         {task.subcontractor_name ? ` · ${task.subcontractor_name}` : ''}
                       </p>
+                      {task.notes && (
+                        <p className="text-xs text-gray-500 italic truncate mt-0.5">💬 {task.notes}</p>
+                      )}
                     </div>
                     <div className="flex gap-1">
                       <button onClick={() => startEdit(task)} className="btn btn-ghost btn-sm text-xs py-0.5">✏️</button>
@@ -1214,6 +1221,22 @@ function LotTasksModal({ lotId, lotName, tasks, users, onClose, onSave, onDelete
               <div className="field col-span-2">
                 <label className="label text-xs">Avancement : {form.progress}%</label>
                 <input type="range" min={0} max={100} step={5} value={form.progress} onChange={e => set('progress', Number(e.target.value))} className="w-full" />
+              </div>
+              <div className="field col-span-2">
+                <label className="label text-xs flex items-center justify-between">
+                  <span>Commentaire / Observations</span>
+                  <span className={`font-mono ${(form.notes || '').length > 1400 ? 'text-red-500' : 'text-gray-400'}`}>
+                    {(form.notes || '').length}/1500
+                  </span>
+                </label>
+                <textarea
+                  className="input resize-none text-sm"
+                  rows={3}
+                  maxLength={1500}
+                  value={form.notes || ''}
+                  onChange={e => set('notes', e.target.value)}
+                  placeholder="Observations de chantier, problèmes rencontrés, instructions…"
+                />
               </div>
             </div>
             <div className="flex gap-2 justify-end">
@@ -1355,7 +1378,15 @@ function LotModal({ lot, mode, users, employees, teams, onClose, onSubmit, t }: 
               )}
             </div>
 
-            <div className="field col-span-2"><label className="label">{t('lots.notes')}</label><textarea className="input resize-none" rows={2} value={form.notes || ''} onChange={e => set('notes', e.target.value)} /></div>
+            <div className="field col-span-2">
+              <label className="label flex items-center justify-between">
+                <span>{t('lots.notes')}</span>
+                <span className={`text-xs font-mono ${(form.notes || '').length > 1900 ? 'text-red-500' : 'text-gray-400'}`}>
+                  {(form.notes || '').length}/2000
+                </span>
+              </label>
+              <textarea className="input resize-none" rows={3} maxLength={2000} value={form.notes || ''} onChange={e => set('notes', e.target.value)} placeholder="Observations, instructions techniques, remarques chantier…" />
+            </div>
             {/* ── Plages de dates manuelles ── */}
             <div className="field col-span-2">
               <label className="label text-blue-700 font-semibold">📅 Plage de dates (forçage manuel)</label>

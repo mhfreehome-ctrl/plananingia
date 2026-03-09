@@ -10,6 +10,7 @@ import Dashboard from './pages/Dashboard'
 import Projects from './pages/Projects/index'
 import ProjectCreate from './pages/Projects/Create'
 import ProjectDetail from './pages/Projects/Detail'
+import ProjectReport from './pages/Projects/Report'
 import Users from './pages/Users'
 import Teams from './pages/Teams'
 import STWorkload from './pages/STWorkload'
@@ -53,6 +54,7 @@ export default function App() {
           <Route path="projects" element={<Projects />} />
           <Route path="projects/new" element={<ProjectCreate />} />
           <Route path="projects/:id" element={<ProjectDetail />} />
+          <Route path="projects/:id/report" element={<ProjectReport />} />
           <Route path="users" element={<Users />} />
           <Route path="users/:id/workload" element={<STWorkload />} />
           <Route path="teams" element={<Teams />} />

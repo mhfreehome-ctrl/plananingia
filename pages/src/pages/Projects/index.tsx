@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useT } from '../../i18n'
 import { api } from '../../api/client'
 
@@ -118,8 +118,23 @@ function ProgressBar({ pct }: { pct: number }) {
 
 export default function Projects() {
   const t = useT()
+  const navigate = useNavigate()
   const [projects, setProjects] = useState<any[]>([])
   const [loading, setLoading]   = useState(true)
+  const [duplicating, setDuplicating] = useState<string | null>(null)
+
+  const handleDuplicate = async (p: any) => {
+    if (!window.confirm(`Dupliquer "${p.name}" avec tous ses lots et sous-tâches ?`)) return
+    setDuplicating(p.id)
+    try {
+      const newProj = await api.projects.duplicate(p.id)
+      navigate(`/projects/${newProj.id}`)
+    } catch {
+      alert('Erreur lors de la duplication')
+    } finally {
+      setDuplicating(null)
+    }
+  }
 
   // ── Persistance vue + tri ─────────────────────────────────
   const [viewMode, setViewMode] = useState<ViewMode>(() =>
@@ -373,8 +388,15 @@ export default function Projects() {
         // ── VUE CARTES ──────────────────────────────────────
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {hierarchical.map(({ project: p, isChild }) => (
-            <Link key={p.id} to={`/projects/${p.id}`}
-              className={`card hover:shadow-md transition-all hover:-translate-y-0.5 block ${isChild ? 'ml-6 border-l-4 border-sky-300' : ''}`}>
+            <div key={p.id} className={`card hover:shadow-md transition-all hover:-translate-y-0.5 relative group ${isChild ? 'ml-6 border-l-4 border-sky-300' : ''}`}>
+              <button
+                onClick={() => handleDuplicate(p)}
+                disabled={duplicating === p.id}
+                title="Dupliquer ce projet"
+                className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity z-10 p-1 rounded text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 text-sm disabled:opacity-30">
+                {duplicating === p.id ? '…' : '⧉'}
+              </button>
+            <Link to={`/projects/${p.id}`} className="block">
               <div className="p-5">
                 <div className="flex items-start justify-between gap-2 mb-1">
                   <div className="min-w-0 flex-1">
@@ -411,6 +433,7 @@ export default function Projects() {
                 </div>
               </div>
             </Link>
+            </div>
           ))}
         </div>
       ) : (
@@ -486,10 +509,19 @@ export default function Projects() {
 
                     {/* Action */}
                     <td className="px-3 py-3">
-                      <Link to={`/projects/${p.id}`} target="_blank" rel="noopener noreferrer"
-                        className="opacity-50 group-hover:opacity-100 transition-all inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-red-200 text-red-500 hover:border-red-400 hover:bg-red-50 text-xs font-medium whitespace-nowrap">
-                        {t('projects.open')} ↗
-                      </Link>
+                      <div className="flex items-center gap-1.5 opacity-50 group-hover:opacity-100 transition-all">
+                        <Link to={`/projects/${p.id}`} target="_blank" rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-red-200 text-red-500 hover:border-red-400 hover:bg-red-50 text-xs font-medium whitespace-nowrap">
+                          {t('projects.open')} ↗
+                        </Link>
+                        <button
+                          onClick={() => handleDuplicate(p)}
+                          disabled={duplicating === p.id}
+                          title="Dupliquer ce projet"
+                          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-gray-200 text-gray-500 hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-600 text-xs font-medium whitespace-nowrap disabled:opacity-40">
+                          {duplicating === p.id ? '…' : '⧉'}
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
