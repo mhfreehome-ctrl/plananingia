@@ -188,13 +188,13 @@ export default function ProjectDetail() {
     if (!id) return
     try {
       const [proj, g, usrs, ms, allTasks, allAssignments, ts] = await Promise.all([
-        api.projects.get(id),
-        api.planning.gantt(id),
-        api.users.list(),
-        api.milestones.list(id),
-        api.lotTasks.listForProject(id),
-        api.lotAssignments.listForProject(id),
-        api.teams.list(),
+        api.projects.get(id),                                                                          // CRITIQUE — si échoue → redirect
+        api.planning.gantt(id).catch(() => ({ project: null, lots: [], dependencies: [] })),          // Non-critique
+        api.users.list().catch(() => []),                                                              // Non-critique
+        api.milestones.list(id).catch(() => []),                                                      // Non-critique
+        api.lotTasks.listForProject(id).catch(() => []),                                              // Non-critique
+        api.lotAssignments.listForProject(id).catch(() => []),                                        // Non-critique
+        api.teams.list().catch(() => []),                                                              // Non-critique
       ])
       setProject(proj)
       setGantt(g)

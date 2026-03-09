@@ -144,14 +144,25 @@ export default function Projects() {
     localStorage.setItem('planningIA_projects_dir', newDir)
   }
 
-  // ── Filtres ───────────────────────────────────────────────
-  const [search,           setSearch]           = useState('')
-  const [filterStatus,     setFilterStatus]     = useState('')
-  const [filterPlanning,   setFilterPlanning]   = useState<'with_lots' | 'no_lots' | ''>('')
-  const [filterDateFrom,   setFilterDateFrom]   = useState('')
-  const [filterDateTo,     setFilterDateTo]     = useState('')
-  const [filterClient,     setFilterClient]     = useState('')
-  const [filterCity,       setFilterCity]       = useState('')
+  // ── Filtres (persistés en sessionStorage pour survivre à la navigation) ──
+  const [search,           setSearch]           = useState(() => sessionStorage.getItem('pAI_proj_search')    || '')
+  const [filterStatus,     setFilterStatus]     = useState(() => sessionStorage.getItem('pAI_proj_status')    || '')
+  const [filterPlanning,   setFilterPlanning]   = useState<'with_lots' | 'no_lots' | ''>(() => (sessionStorage.getItem('pAI_proj_planning') || '') as any)
+  const [filterDateFrom,   setFilterDateFrom]   = useState(() => sessionStorage.getItem('pAI_proj_dateFrom')  || '')
+  const [filterDateTo,     setFilterDateTo]     = useState(() => sessionStorage.getItem('pAI_proj_dateTo')    || '')
+  const [filterClient,     setFilterClient]     = useState(() => sessionStorage.getItem('pAI_proj_client')    || '')
+  const [filterCity,       setFilterCity]       = useState(() => sessionStorage.getItem('pAI_proj_city')      || '')
+
+  // Synchronise les filtres → sessionStorage à chaque changement
+  useEffect(() => {
+    sessionStorage.setItem('pAI_proj_search',    search)
+    sessionStorage.setItem('pAI_proj_status',    filterStatus)
+    sessionStorage.setItem('pAI_proj_planning',  filterPlanning)
+    sessionStorage.setItem('pAI_proj_dateFrom',  filterDateFrom)
+    sessionStorage.setItem('pAI_proj_dateTo',    filterDateTo)
+    sessionStorage.setItem('pAI_proj_client',    filterClient)
+    sessionStorage.setItem('pAI_proj_city',      filterCity)
+  }, [search, filterStatus, filterPlanning, filterDateFrom, filterDateTo, filterClient, filterCity])
 
   useEffect(() => {
     api.projects.list().then(setProjects).finally(() => setLoading(false))
