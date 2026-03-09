@@ -309,7 +309,7 @@ export default function UnifiedPlanning() {
                             href={`/projects/${p.id}`}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="opacity-0 group-hover:opacity-100 transition-opacity text-indigo-400 hover:text-indigo-600 flex-shrink-0"
+                            className="inline-flex items-center justify-center w-5 h-5 rounded border border-red-300 text-red-400 hover:bg-red-50 hover:border-red-500 hover:text-red-600 text-xs flex-shrink-0 transition-all opacity-50 group-hover:opacity-100"
                             onClick={e => e.stopPropagation()}
                           >↗</a>
                         </div>
@@ -393,7 +393,7 @@ export default function UnifiedPlanning() {
                     href={`/projects/${p.id}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="opacity-0 group-hover:opacity-100 transition-opacity text-indigo-400 hover:text-indigo-600 flex-shrink-0 text-xs"
+                    className="inline-flex items-center justify-center w-4 h-4 rounded border border-red-300 text-red-400 hover:bg-red-50 hover:text-red-600 text-[10px] flex-shrink-0 transition-all opacity-40 group-hover:opacity-100"
                     onClick={e => e.stopPropagation()}
                   >↗</a>
                 </div>

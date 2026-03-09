@@ -487,7 +487,7 @@ export default function Projects() {
                     {/* Action */}
                     <td className="px-3 py-3">
                       <Link to={`/projects/${p.id}`} target="_blank" rel="noopener noreferrer"
-                        className="opacity-0 group-hover:opacity-100 transition-opacity text-indigo-500 hover:text-indigo-700 font-medium text-xs whitespace-nowrap">
+                        className="opacity-50 group-hover:opacity-100 transition-all inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-red-200 text-red-500 hover:border-red-400 hover:bg-red-50 text-xs font-medium whitespace-nowrap">
                         {t('projects.open')} ↗
                       </Link>
                     </td>
