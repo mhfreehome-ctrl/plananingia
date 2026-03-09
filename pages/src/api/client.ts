@@ -28,7 +28,8 @@ async function req<T>(method: string, path: string, body?: unknown): Promise<T> 
       if (!res2.ok) throw new Error(await res2.text())
       return res2.json() as Promise<T>
     }
-    window.location.href = '/login'
+    // Ne pas rediriger si déjà sur /login — évite la boucle infinie
+    if (window.location.pathname !== '/login') window.location.href = '/login'
     throw new Error('Unauthorized')
   }
 
