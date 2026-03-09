@@ -19,7 +19,7 @@ import platformRoutes from './routes/platform'
 const app = new Hono<{ Bindings: Env }>()
 
 app.use('*', cors({
-  origin: ['https://planningia.pages.dev', 'https://planningia.com', 'https://www.planningia.com', 'http://localhost:5173'],
+  origin: ['https://planningia.pages.dev', 'https://develop.planningia.pages.dev', 'https://planningia.com', 'https://www.planningia.com', 'http://localhost:5173'],
   allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowHeaders: ['Content-Type', 'Authorization'],
   credentials: true,
