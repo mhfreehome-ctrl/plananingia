@@ -39,7 +39,12 @@ export const useAuth = create<AuthStore>((set) => ({
   loading: true,
 
   init: async () => {
-    // Le token localStorage est envoyé automatiquement via buildHeaders() dans client.ts
+    // Sans token, l'utilisateur n'est pas connecté — pas besoin d'appeler l'API
+    // Évite la race condition : init() inflight → 401 → écrase le user set par login()
+    if (!localStorage.getItem('planningai_access_token')) {
+      set({ user: null, loading: false })
+      return
+    }
     try {
       const raw = await api.auth.me()
       set({ user: parseUser(raw), loading: false })
@@ -50,10 +55,9 @@ export const useAuth = create<AuthStore>((set) => ({
 
   login: async (email, password) => {
     const data = await api.auth.login(email, password)
-    // Persist tokens for cross-session + mobile compatibility
     saveTokens(data.access_token, data.refresh_token)
-    // Profil de base disponible immédiatement — init() chargera le profil complet au prochain load
-    set({ user: { ...data.user, company_activity: null, company_lot_types: null, company_display_name: null } })
+    // loading: false garantit que RequireAuth ne bloque pas sur init() inflight
+    set({ user: { ...data.user, company_activity: null, company_lot_types: null, company_display_name: null }, loading: false })
   },
 
   logout: async () => {
