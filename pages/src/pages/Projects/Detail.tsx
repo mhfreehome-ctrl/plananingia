@@ -777,6 +777,7 @@ export default function ProjectDetail() {
           lotName={taskModal.lotName}
           tasks={lotTasksMap[taskModal.lotId] || []}
           users={users}
+          employees={employees}
           onClose={() => setTaskModal(null)}
           onSave={handleSaveLotTask}
           onDelete={handleDeleteLotTask}
@@ -1078,10 +1079,11 @@ const TASK_TYPES = [
   { value: 'custom', label: 'Autre', color: '#94a3b8' },
 ]
 
-function LotTasksModal({ lotId, lotName, tasks, users, onClose, onSave, onDelete, initialTaskId, lot }: any) {
+function LotTasksModal({ lotId, lotName, tasks, users, employees, onClose, onSave, onDelete, initialTaskId, lot }: any) {
   const emptyForm = { name: '', type: 'custom', start_date: '', end_date: '', progress: 0, subcontractor_id: '', sort_order: tasks.length, notes: '' }
   const [form, setForm] = useState<any>(emptyForm)
   const [editingId, setEditingId] = useState<string | null>(null) // null = add mode
+  const [assignType, setAssignType] = useState<'subcontractor' | 'employee'>('subcontractor')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const set = (k: string, v: any) => setForm((f: any) => ({ ...f, [k]: v }))
@@ -1090,6 +1092,11 @@ function LotTasksModal({ lotId, lotName, tasks, users, onClose, onSave, onDelete
     setEditingId(task.id)
     setError(null)
     setForm({ name: task.name, type: task.type, start_date: task.start_date || '', end_date: task.end_date || '', progress: task.progress, subcontractor_id: task.subcontractor_id || '', sort_order: task.sort_order || 0, notes: task.notes || '' })
+    if (task.subcontractor_id && (employees || []).some((e: any) => e.id === task.subcontractor_id)) {
+      setAssignType('employee')
+    } else {
+      setAssignType('subcontractor')
+    }
   }
 
   // Auto-ouvrir l'édition si on arrive depuis un clic direct sur la tâche
@@ -1100,7 +1107,7 @@ function LotTasksModal({ lotId, lotName, tasks, users, onClose, onSave, onDelete
     }
   }, [initialTaskId])
 
-  const cancelEdit = () => { setEditingId(null); setForm(emptyForm); setError(null) }
+  const cancelEdit = () => { setEditingId(null); setForm(emptyForm); setError(null); setAssignType('subcontractor') }
 
   // Calcul durée utilisée (hors tâche en cours d'édition)
   const usedDays = tasks
@@ -1204,10 +1211,23 @@ function LotTasksModal({ lotId, lotName, tasks, users, onClose, onSave, onDelete
                 </select>
               </div>
               <div className="field">
-                <label className="label text-xs">Sous-traitant</label>
+                <label className="label text-xs">Affectation</label>
+                <div className="flex gap-1 mb-1">
+                  <button type="button" onClick={() => { setAssignType('subcontractor'); set('subcontractor_id', '') }}
+                    className={`btn btn-xs flex-1 ${assignType === 'subcontractor' ? 'btn-primary' : 'btn-ghost border border-gray-200'}`}>
+                    🏢 ST
+                  </button>
+                  <button type="button" onClick={() => { setAssignType('employee'); set('subcontractor_id', '') }}
+                    className={`btn btn-xs flex-1 ${assignType === 'employee' ? 'btn-primary' : 'btn-ghost border border-gray-200'}`}>
+                    👷 Salarié {(employees || []).length === 0 && <span className="text-xs opacity-60">(0)</span>}
+                  </button>
+                </div>
                 <select className="select select-sm" value={form.subcontractor_id} onChange={e => set('subcontractor_id', e.target.value)}>
                   <option value="">— Aucun —</option>
-                  {users.map((u: any) => <option key={u.id} value={u.id}>{u.first_name} {u.last_name}</option>)}
+                  {assignType === 'subcontractor'
+                    ? users.map((u: any) => <option key={u.id} value={u.id}>{u.first_name} {u.last_name}</option>)
+                    : (employees || []).map((u: any) => <option key={u.id} value={u.id}>{u.first_name} {u.last_name}</option>)
+                  }
                 </select>
               </div>
               <div className="field">
