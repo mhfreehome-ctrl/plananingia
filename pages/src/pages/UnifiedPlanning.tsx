@@ -500,22 +500,22 @@ export default function UnifiedPlanning() {
                   >
                     {hasBar ? (
                       <>
-                        {/* Barre principale */}
+                        {/* Barre principale — pastel */}
                         <rect
                           x={x1} y={y}
                           width={Math.max(x2 - x1, 4)} height={h}
                           rx={3}
                           fill={color}
-                          opacity={0.85}
+                          opacity={0.22}
                         />
-                        {/* Barre progression */}
+                        {/* Barre progression — vivid */}
                         {p.avg_progress > 0 && (
                           <rect
                             x={x1} y={y}
                             width={Math.max(((x2 - x1) * (p.avg_progress / 100)), 0)} height={h}
                             rx={3}
                             fill={color}
-                            opacity={1}
+                            opacity={0.88}
                           />
                         )}
                         {/* Label dans la barre si assez large */}

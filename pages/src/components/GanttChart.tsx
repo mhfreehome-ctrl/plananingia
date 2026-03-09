@@ -578,18 +578,42 @@ export default function GanttChart({ lots, deps, projectStartDate, lang = 'fr', 
                     style={{ position: 'absolute', top: y, left: 0, width: '100%', height: rh }}
                     onMouseEnter={!drag ? (e) => setTooltip({ lot: l, x: e.clientX, y: e.clientY }) : undefined}
                     onMouseLeave={!drag ? () => setTooltip(null) : undefined}>
+                    {/* ── Couche 1 : fond pastel (opacity isolée, ne cascade pas) ── */}
                     <div
-                      draggable={false}
                       style={{
-                        position: 'absolute', left: x, top: l.parent_lot_id ? 10 : 8, height: l.parent_lot_id ? 22 : 28, width: w,
+                        position: 'absolute', left: x, top: l.parent_lot_id ? 10 : 8,
+                        height: l.parent_lot_id ? 22 : 28, width: w,
                         backgroundColor: l.color,
-                        opacity: isDragged ? 0.75 : (l.status === 'done' ? 0.6 : l.is_provisional ? 0.45 : 0.85),
+                        opacity: isDragged ? 0.45 : (l.status === 'done' ? 0.15 : l.is_provisional ? 0.12 : 0.22),
                         borderRadius: 6,
-                        cursor: canDrag ? (isDragged && drag!.mode === 'resize' ? 'col-resize' : isDragged ? 'grabbing' : 'grab') : 'default',
-                        boxShadow: isDragged ? '0 4px 16px rgba(0,0,0,0.25)' : undefined,
+                        pointerEvents: 'none',
                         backgroundImage: l.is_provisional && !isDragged
                           ? 'repeating-linear-gradient(45deg, transparent, transparent 5px, rgba(255,255,255,0.35) 5px, rgba(255,255,255,0.35) 10px)'
                           : undefined,
+                      }}
+                    />
+                    {/* ── Couche 2 : avancement vivid ─────────────────────────────── */}
+                    {l.progress_percent > 0 && (
+                      <div
+                        style={{
+                          position: 'absolute', left: x, top: l.parent_lot_id ? 10 : 8,
+                          height: l.parent_lot_id ? 22 : 28, width: progressW,
+                          backgroundColor: l.color,
+                          opacity: isDragged ? 0.65 : (l.status === 'done' ? 0.45 : 0.82),
+                          borderRadius: '6px 0 0 6px',
+                          pointerEvents: 'none',
+                        }}
+                      />
+                    )}
+                    {/* ── Couche 3 : interaction + label (fond transparent) ────────── */}
+                    <div
+                      draggable={false}
+                      style={{
+                        position: 'absolute', left: x, top: l.parent_lot_id ? 10 : 8,
+                        height: l.parent_lot_id ? 22 : 28, width: w,
+                        borderRadius: 6,
+                        cursor: canDrag ? (isDragged && drag!.mode === 'resize' ? 'col-resize' : isDragged ? 'grabbing' : 'grab') : 'default',
+                        boxShadow: isDragged ? '0 4px 16px rgba(0,0,0,0.25)' : undefined,
                       }}
                       className={l.is_critical && !isDragged ? 'ring-2 ring-red-400 ring-offset-0' : ''}
                       onClick={(e) => {
@@ -625,11 +649,8 @@ export default function GanttChart({ lots, deps, projectStartDate, lang = 'fr', 
                         })
                       } : undefined}
                     >
-                      {l.progress_percent > 0 && (
-                        <div style={{ width: progressW, height: '100%', backgroundColor: 'rgba(0,0,0,0.25)', borderRadius: '6px 0 0 6px' }} />
-                      )}
                       <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', paddingLeft: 8 }}>
-                        <span style={{ color: 'white', fontSize: 11, fontWeight: 600, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
+                        <span style={{ color: 'white', fontSize: 11, fontWeight: 700, textShadow: '0 1px 3px rgba(0,0,0,0.75)', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
                           {l.code} {l.progress_percent > 0 ? `${l.progress_percent}%` : ''}
                         </span>
                       </div>
@@ -674,14 +695,18 @@ export default function GanttChart({ lots, deps, projectStartDate, lang = 'fr', 
                       const ay = ROW_H + ai * (ASGN_H + ASGN_GAP) + 2
                       const ac = ASGN_COLORS[ai % ASGN_COLORS.length]
                       return (
-                        <div key={asgn.id} style={{ position: 'absolute', left: ax, top: ay, width: aw, height: ASGN_H,
-                          backgroundColor: ac, opacity: 0.8, borderRadius: 4 }}
-                          title={`${asgn.subcontractor_name}${asgn.company_name ? ' · ' + asgn.company_name : ''}${asgn.progress > 0 ? ' · ' + asgn.progress + '%' : ''}`}>
+                        <div key={asgn.id}
+                          title={`${asgn.subcontractor_name}${asgn.company_name ? ' · ' + asgn.company_name : ''}${asgn.progress > 0 ? ' · ' + asgn.progress + '%' : ''}`}
+                          style={{ position: 'absolute', left: ax, top: ay, width: aw, height: ASGN_H }}>
+                          {/* fond pastel */}
+                          <div style={{ position: 'absolute', inset: 0, backgroundColor: ac, opacity: 0.22, borderRadius: 4, pointerEvents: 'none' }} />
+                          {/* progression vivid */}
                           {asgn.progress > 0 && (
-                            <div style={{ width: `${asgn.progress}%`, height: '100%', backgroundColor: 'rgba(0,0,0,0.2)', borderRadius: '4px 0 0 4px' }} />
+                            <div style={{ position: 'absolute', left: 0, top: 0, width: `${asgn.progress}%`, height: '100%', backgroundColor: ac, opacity: 0.82, borderRadius: '4px 0 0 4px', pointerEvents: 'none' }} />
                           )}
+                          {/* label */}
                           <div style={{ position: 'absolute', inset: 0, paddingLeft: 5, display: 'flex', alignItems: 'center' }}>
-                            <span style={{ color: 'white', fontSize: 9, fontWeight: 700, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
+                            <span style={{ color: 'white', fontSize: 9, fontWeight: 700, textShadow: '0 1px 2px rgba(0,0,0,0.7)', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
                               {asgn.subcontractor_name}
                             </span>
                           </div>
