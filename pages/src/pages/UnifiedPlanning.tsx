@@ -115,28 +115,61 @@ export default function UnifiedPlanning() {
 
   // Export PDF (html2canvas sur le container Gantt)
   const exportPDF = async (format: 'A4' | 'A3') => {
-    if (exporting || !ganttContainerRef.current) return
+    if (exporting || !ganttContainerRef.current || !scrollRef.current || !leftColRef.current) return
     setExporting(true)
     try {
-      const el = ganttContainerRef.current
-      const leftDiv  = el.querySelector<HTMLElement>('.flex-shrink-0.flex-col')
-      const rightDiv = el.querySelector<HTMLElement>('.flex-1.overflow-auto')
-      const prevElOverflow = el.style.overflow
-      const prevElHeight   = el.style.height
-      const prevRightW     = rightDiv?.style.width || ''
-      if (leftDiv)  leftDiv.style.overflowY  = 'visible'
-      if (rightDiv) { rightDiv.style.overflowX = 'visible'; rightDiv.style.overflowY = 'visible'; rightDiv.style.width = totalWidth + 'px' }
-      el.style.overflow = 'visible'
-      el.style.height   = 'auto'
+      const el        = ganttContainerRef.current
+      const parentEl  = el.parentElement
+      const leftInner = leftColRef.current   // div scroll interne colonne gauche
+      const rightDiv  = scrollRef.current    // div scroll droite (zone Gantt)
+
+      // Hauteurs réelles du contenu complet
+      const rowsH  = filtered.length * ROW_H
+      const totalH = rowsH + 44 // 44 = hauteur header colonnes
+      const totalW = LEFT_COL + totalWidth
+
+      // Sauvegarder les styles
+      const saved: [HTMLElement, string, string][] = [
+        [el,       'overflow', el.style.overflow],
+        [el,       'height',   el.style.height],
+        [el,       'flex',     el.style.flex],
+        [leftInner,'overflow', leftInner.style.overflow],
+        [leftInner,'height',   leftInner.style.height],
+        [rightDiv, 'overflow', rightDiv.style.overflow],
+        [rightDiv, 'height',   rightDiv.style.height],
+        [rightDiv, 'width',    rightDiv.style.width],
+      ]
+      if (parentEl) saved.push(
+        [parentEl, 'overflow', parentEl.style.overflow],
+        [parentEl, 'height',   parentEl.style.height],
+      )
+
+      // Forcer les dimensions complètes
+      el.style.overflow  = 'visible'
+      el.style.height    = totalH + 'px'
+      el.style.flex      = 'none'
+      leftInner.style.overflow = 'visible'
+      leftInner.style.height   = rowsH + 'px'
+      rightDiv.style.overflow  = 'visible'
+      rightDiv.style.height    = totalH + 'px'
+      rightDiv.style.width     = totalWidth + 'px'
+      if (parentEl) { parentEl.style.overflow = 'visible'; parentEl.style.height = 'auto' }
+
+      await new Promise(r => setTimeout(r, 80)) // laisser le DOM repaint
+
       const [{ default: html2canvas }, { default: jsPDF }] = await Promise.all([
         import('html2canvas'),
         import('jspdf'),
       ])
-      const canvas = await html2canvas(el, { scale: 2, useCORS: true, logging: false })
-      if (leftDiv)  leftDiv.style.overflowY  = ''
-      if (rightDiv) { rightDiv.style.overflowX = ''; rightDiv.style.overflowY = ''; rightDiv.style.width = prevRightW }
-      el.style.overflow = prevElOverflow
-      el.style.height   = prevElHeight
+      const canvas = await html2canvas(el, {
+        scale: 2, useCORS: true, logging: false,
+        width: totalW, height: totalH,
+        windowWidth: totalW + 100,
+      })
+
+      // Restaurer les styles
+      for (const [elem, prop, val] of saved) (elem.style as any)[prop] = val
+
       const imgData = canvas.toDataURL('image/jpeg', 0.92)
       const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: format.toLowerCase() as 'a4' | 'a3' })
       const [pw, ph] = format === 'A4' ? [297, 210] : [420, 297]
