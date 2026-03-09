@@ -1,7 +1,8 @@
 import { Hono } from 'hono'
+import { getCookie, setCookie, deleteCookie } from 'hono/cookie'
 import { hashPassword, verifyPassword, generateId, hashToken } from '../utils/crypto'
-import { signJWT, verifyJWT } from '../utils/jwt'
-import { requireAuth } from '../middleware/auth'
+import { signJWT } from '../utils/jwt'
+import { requireAuth, requireAdmin } from '../middleware/auth'
 import { sendEmail, htmlPasswordReset } from '../utils/email'
 import { checkRateLimit, getClientIp } from '../utils/ratelimit'
 import type { Env } from '../types'
@@ -10,8 +11,21 @@ const APP_URL = 'https://www.planningia.com'
 
 const auth = new Hono<{ Bindings: Env }>()
 
-const ACCESS_TTL = 15 * 60          // 15 min
-const REFRESH_TTL = 30 * 24 * 3600 // 30 days
+const ACCESS_TTL = 15 * 60          // 15 min (secondes)
+const REFRESH_TTL = 30 * 24 * 3600 // 30 jours (secondes)
+
+// Attributs communs des cookies auth (HttpOnly, cross-origin Secure)
+const COOKIE_BASE = { httpOnly: true, secure: true, sameSite: 'None', path: '/' } as const
+
+function setAuthCookies(c: any, accessToken: string, refreshToken: string) {
+  setCookie(c, 'access_token', accessToken, { ...COOKIE_BASE, maxAge: ACCESS_TTL })
+  setCookie(c, 'refresh_token', refreshToken, { ...COOKIE_BASE, maxAge: REFRESH_TTL })
+}
+
+function clearAuthCookies(c: any) {
+  deleteCookie(c, 'access_token', { ...COOKIE_BASE })
+  deleteCookie(c, 'refresh_token', { ...COOKIE_BASE })
+}
 
 auth.post('/login', async (c) => {
   const ip = getClientIp(c.req.raw)
@@ -39,15 +53,17 @@ auth.post('/login', async (c) => {
     company_type: user.company_type || null,
     access_level: user.access_level || 'editeur',
   }, c.env.JWT_SECRET, ACCESS_TTL)
+
   const refreshRaw = generateId()
   const refreshHash = await hashToken(refreshRaw)
   const expiresAt = new Date(Date.now() + REFRESH_TTL * 1000).toISOString()
   await c.env.DB.prepare('INSERT INTO refresh_tokens (id, user_id, token_hash, expires_at) VALUES (?, ?, ?, ?)')
     .bind(generateId(), user.id, refreshHash, expiresAt).run()
 
+  setAuthCookies(c, access, refreshRaw)
+
+  // Tokens dans les cookies HttpOnly uniquement — réponse JSON contient uniquement le profil
   return c.json({
-    access_token: access,
-    refresh_token: refreshRaw,
     user: {
       id: user.id, email: user.email, role: user.role,
       first_name: user.first_name, last_name: user.last_name,
@@ -60,7 +76,15 @@ auth.post('/login', async (c) => {
 })
 
 auth.post('/refresh', async (c) => {
-  const { refresh_token } = await c.req.json()
+  // Cookie-first, puis fallback corps JSON (compatibilité API clients)
+  const cookieRefresh = getCookie(c, 'refresh_token')
+  let refresh_token = cookieRefresh
+  if (!refresh_token) {
+    try {
+      const body = await c.req.json() as any
+      refresh_token = body.refresh_token
+    } catch { /* pas de corps JSON */ }
+  }
   if (!refresh_token) return c.json({ error: 'Missing token' }, 400)
 
   const tokenHash = await hashToken(refresh_token)
@@ -74,6 +98,7 @@ auth.post('/refresh', async (c) => {
   `).bind(tokenHash).first<any>()
 
   if (!stored || new Date(stored.expires_at) < new Date()) {
+    clearAuthCookies(c)
     return c.json({ error: 'Invalid or expired refresh token' }, 401)
   }
 
@@ -90,12 +115,15 @@ auth.post('/refresh', async (c) => {
     company_type: stored.company_type || null,
     access_level: stored.access_level || 'editeur',
   }, c.env.JWT_SECRET, ACCESS_TTL)
-  return c.json({ access_token: access, refresh_token: newRaw })
+
+  setAuthCookies(c, access, newRaw)
+  return c.json({ ok: true })
 })
 
 auth.post('/logout', requireAuth, async (c) => {
   const user = c.get('user')
   await c.env.DB.prepare('DELETE FROM refresh_tokens WHERE user_id = ?').bind(user.sub).run()
+  clearAuthCookies(c)
   return c.json({ ok: true })
 })
 
@@ -135,11 +163,8 @@ auth.put('/change-password', requireAuth, async (c) => {
 })
 
 // Admin: invite subcontractor — hérite du company_id de l'admin invitant
-auth.post('/invite', async (c) => {
-  const authH = c.req.header('Authorization')
-  if (!authH?.startsWith('Bearer ')) return c.json({ error: 'Unauthorized' }, 401)
-  const payload = await verifyJWT(authH.slice(7), c.env.JWT_SECRET)
-  if (!payload || payload.role !== 'admin') return c.json({ error: 'Forbidden' }, 403)
+auth.post('/invite', requireAdmin, async (c) => {
+  const payload = c.get('user')
 
   const { email, first_name, last_name, company_name, phone, lang, user_type, access_level } = await c.req.json()
   if (!email) return c.json({ error: 'Email required' }, 400)

@@ -1,4 +1,5 @@
 import { Context, Next } from 'hono'
+import { getCookie } from 'hono/cookie'
 import { verifyJWT } from '../utils/jwt'
 import type { Env, JWTPayload } from '../types'
 
@@ -8,11 +9,13 @@ declare module 'hono' {
   }
 }
 
-// Helper partagé : vérifie le JWT et retourne le payload, ou null si invalide
+// Helper partagé : cookie HttpOnly d'abord, puis Bearer header en fallback (API clients)
 async function getVerifiedPayload(c: Context<{ Bindings: Env }>): Promise<JWTPayload | null> {
+  const cookieToken = getCookie(c, 'access_token')
+  if (cookieToken) return verifyJWT(cookieToken, c.env.JWT_SECRET)
   const auth = c.req.header('Authorization')
-  if (!auth?.startsWith('Bearer ')) return null
-  return verifyJWT(auth.slice(7), c.env.JWT_SECRET)
+  if (auth?.startsWith('Bearer ')) return verifyJWT(auth.slice(7), c.env.JWT_SECRET)
+  return null
 }
 
 // Tout utilisateur authentifié (admin ou subcontractor)
