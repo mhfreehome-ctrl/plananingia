@@ -3,6 +3,7 @@ import { hashPassword, verifyPassword, generateId, hashToken } from '../utils/cr
 import { signJWT, verifyJWT } from '../utils/jwt'
 import { requireAuth } from '../middleware/auth'
 import { sendEmail, htmlPasswordReset } from '../utils/email'
+import { checkRateLimit, getClientIp } from '../utils/ratelimit'
 import type { Env } from '../types'
 
 const APP_URL = 'https://www.planningia.com'
@@ -13,6 +14,10 @@ const ACCESS_TTL = 15 * 60          // 15 min
 const REFRESH_TTL = 30 * 24 * 3600 // 30 days
 
 auth.post('/login', async (c) => {
+  const ip = getClientIp(c.req.raw)
+  const retry = await checkRateLimit(c.env.KV, `rl:login:${ip}`, 5, 15 * 60 * 1000)
+  if (retry !== null) return c.json({ error: 'Too many attempts, try again later', retry_after: retry }, 429)
+
   const { email, password } = await c.req.json()
   if (!email || !password) return c.json({ error: 'Missing fields' }, 400)
 
@@ -160,6 +165,10 @@ auth.post('/invite', async (c) => {
 
 // Accept invite: set password
 auth.post('/accept-invite', async (c) => {
+  const ip = getClientIp(c.req.raw)
+  const retry = await checkRateLimit(c.env.KV, `rl:accept-invite:${ip}`, 10, 60 * 60 * 1000)
+  if (retry !== null) return c.json({ error: 'Too many attempts, try again later', retry_after: retry }, 429)
+
   const { token, password } = await c.req.json()
   if (!token || !password) return c.json({ error: 'Missing fields' }, 400)
   const user = await c.env.DB.prepare('SELECT * FROM users WHERE invite_token = ? AND is_active = 0').bind(token).first<any>()
@@ -172,6 +181,10 @@ auth.post('/accept-invite', async (c) => {
 
 // POST /api/auth/forgot-password — request password reset email
 auth.post('/forgot-password', async (c) => {
+  const ip = getClientIp(c.req.raw)
+  const retry = await checkRateLimit(c.env.KV, `rl:forgot-password:${ip}`, 3, 60 * 60 * 1000)
+  if (retry !== null) return c.json({ error: 'Too many attempts, try again later', retry_after: retry }, 429)
+
   const { email } = await c.req.json()
   if (!email) return c.json({ error: 'Email required' }, 400)
 
@@ -204,6 +217,10 @@ auth.post('/forgot-password', async (c) => {
 
 // POST /api/auth/reset-password — apply new password with token
 auth.post('/reset-password', async (c) => {
+  const ip = getClientIp(c.req.raw)
+  const retry = await checkRateLimit(c.env.KV, `rl:reset-password:${ip}`, 5, 15 * 60 * 1000)
+  if (retry !== null) return c.json({ error: 'Too many attempts, try again later', retry_after: retry }, 429)
+
   const { token, password } = await c.req.json()
   if (!token || !password) return c.json({ error: 'Missing fields' }, 400)
   if (password.length < 8) return c.json({ error: 'Password too short (min 8 chars)' }, 400)
