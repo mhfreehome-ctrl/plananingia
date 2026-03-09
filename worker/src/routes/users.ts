@@ -84,9 +84,11 @@ users.post('/:id/reset-password', requireFullAdmin, async (c) => {
     if (!target) return c.json({ error: 'Not found' }, 404)
     if (target.company_id !== admin.company_id) return c.json({ error: 'Forbidden' }, 403)
   }
-  // Générer mot de passe temporaire : Motdepasse + 4 chiffres aléatoires
-  const digits = Math.floor(1000 + Math.random() * 9000)
-  const tempPassword = `Temp${digits}!`
+  // Générer mot de passe temporaire avec CSPRNG (8 chars alphanumériques)
+  const charset = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789'
+  const bytes = crypto.getRandomValues(new Uint8Array(8))
+  const rand = Array.from(bytes).map(b => charset[b % charset.length]).join('')
+  const tempPassword = `Tmp-${rand}!`
   const hash = await hashPassword(tempPassword)
   await c.env.DB.prepare(
     `UPDATE users SET password_hash=?, updated_at=datetime('now') WHERE id=?`
