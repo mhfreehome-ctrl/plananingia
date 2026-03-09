@@ -301,8 +301,19 @@ export default function UnifiedPlanning() {
                   const start = p.gantt_start ? new Date(p.gantt_start).toLocaleDateString() : '—'
                   const end   = p.gantt_end   ? new Date(p.gantt_end).toLocaleDateString()   : '—'
                   return (
-                    <tr key={p.id} className="cursor-pointer hover:bg-gray-50" onClick={() => window.open(`/projects/${p.id}`, '_blank')}>
-                      <td className="font-medium text-primary-700">{p.name}</td>
+                    <tr key={p.id} className="cursor-pointer hover:bg-gray-50 group" onClick={() => navigate(`/projects/${p.id}`)}>
+                      <td className="font-medium text-primary-700">
+                        <div className="flex items-center gap-2">
+                          {p.name}
+                          <a
+                            href={`/projects/${p.id}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="opacity-0 group-hover:opacity-100 transition-opacity text-indigo-400 hover:text-indigo-600 flex-shrink-0"
+                            onClick={e => e.stopPropagation()}
+                          >↗</a>
+                        </div>
+                      </td>
                       <td>
                         <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full" style={{ background: color + '22', color }}>
                           <span className="w-1.5 h-1.5 rounded-full inline-block" style={{ background: color }} />
@@ -361,8 +372,8 @@ export default function UnifiedPlanning() {
               {filtered.map((p, i) => (
                 <div
                   key={p.id}
-                  onClick={() => window.open(`/projects/${p.id}`, '_blank')}
-                  className="flex items-center gap-2 px-3 cursor-pointer hover:bg-blue-50 transition-colors border-b border-gray-100"
+                  onClick={() => navigate(`/projects/${p.id}`)}
+                  className="group flex items-center gap-2 px-3 cursor-pointer hover:bg-blue-50 transition-colors border-b border-gray-100"
                   style={{ height: ROW_H }}
                   title={`${p.name}${p.city ? ' — ' + p.city : ''}`}
                 >
@@ -370,7 +381,7 @@ export default function UnifiedPlanning() {
                     className="w-2 h-2 rounded-full flex-shrink-0"
                     style={{ background: STATUS_COLORS[p.status] || '#9ca3af' }}
                   />
-                  <span className="text-xs font-medium text-gray-700 truncate leading-tight">
+                  <span className="text-xs font-medium text-gray-700 truncate leading-tight flex-1">
                     {p.name}
                   </span>
                   {p.city && (
@@ -378,6 +389,13 @@ export default function UnifiedPlanning() {
                       {p.city}
                     </span>
                   )}
+                  <a
+                    href={`/projects/${p.id}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="opacity-0 group-hover:opacity-100 transition-opacity text-indigo-400 hover:text-indigo-600 flex-shrink-0 text-xs"
+                    onClick={e => e.stopPropagation()}
+                  >↗</a>
                 </div>
               ))}
             </div>
@@ -478,7 +496,7 @@ export default function UnifiedPlanning() {
                   <g
                     key={p.id}
                     style={{ cursor: 'pointer' }}
-                    onClick={() => window.open(`/projects/${p.id}`, '_blank')}
+                    onClick={() => navigate(`/projects/${p.id}`)}
                   >
                     {hasBar ? (
                       <>
