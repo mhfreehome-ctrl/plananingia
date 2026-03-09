@@ -129,7 +129,7 @@ lots.get('/projects/:id/lots', requireAuth, async (c) => {
   const user = c.get('user')
   if (user.company_id) {
     const proj = await c.env.DB.prepare('SELECT company_id FROM projects WHERE id = ?').bind(id).first<any>()
-    if (!proj || proj.company_id !== user.company_id) return c.json({ error: 'Forbidden' }, 403)
+    if (!proj || (proj.company_id !== null && proj.company_id !== user.company_id)) return c.json({ error: 'Forbidden' }, 403)
   }
   const rows = await c.env.DB.prepare(`
     SELECT l.*,
@@ -407,18 +407,21 @@ lots.put('/lots/:id', requireAdmin, async (c) => {
   ).bind(id).first<any>()
   if (!prev || (user.company_id && prev.company_id !== user.company_id)) return c.json({ error: 'Forbidden' }, 403)
 
+  const lotNotesTrimmed = body.notes ? String(body.notes).slice(0, 2000) : null
   await c.env.DB.prepare(`
     UPDATE lots SET code=?, name=?, name_tr=?, duration_days=?, color=?, zone=?, notes=?,
       subcontractor_id=?, team_id=?, sort_order=?, market_deadline=?, is_provisional=?, parent_lot_id=?,
       start_date_planned=?, end_date_planned=?,
+      notes_updated_at=CASE WHEN notes != ? OR (notes IS NULL AND ? IS NOT NULL) OR (notes IS NOT NULL AND ? IS NULL) THEN datetime('now') ELSE notes_updated_at END,
       updated_at=datetime('now')
     WHERE id=?
   `).bind(body.code, body.name, body.name_tr || null, body.duration_days, body.color,
-    body.zone || null, body.notes ? String(body.notes).slice(0, 2000) : null,
+    body.zone || null, lotNotesTrimmed,
     body.subcontractor_id || null, body.team_id || null,
     body.sort_order || 0,
     body.market_deadline || null, body.is_provisional ? 1 : 0, body.parent_lot_id || null,
     body.start_date_planned || null, body.end_date_planned || null,
+    lotNotesTrimmed, lotNotesTrimmed, lotNotesTrimmed,
     id).run()
 
   // Notify subcontractor if newly assigned (or reassigned to someone else)

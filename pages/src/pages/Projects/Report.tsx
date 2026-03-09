@@ -97,6 +97,17 @@ export default function ProjectReport() {
       const setDraw = (hex: string) => { const [r,g,b] = hexToRgb(hex); doc.setDrawColor(r, g, b) }
       const setTextColor = (hex: string) => { const [r,g,b] = hexToRgb(hex); doc.setTextColor(r, g, b) }
 
+      // Supprime les caractères Unicode hors WinAnsi (> U+00FF) pour Helvetica/Arial
+      const pdf = (text: string) => text
+        .replace(/→|➜|➡/g, '>')
+        .replace(/←/g, '<')
+        .replace(/—|–/g, '-')
+        .replace(/…/g, '...')
+        .replace(/[""«»]/g, '"')
+        .replace(/[''‹›]/g, "'")
+        .replace(/•|·/g, '-')
+        .replace(/[^\x00-\xFF]/g, '?')
+
       // ── Fonctions utilitaires ──────────────────────────────────────────
 
       // Vérifier espace restant, saut de page si besoin
@@ -268,14 +279,16 @@ export default function ProjectReport() {
         // Nom lot
         doc.setFontSize(10)
         setTextColor(COLOR_TEXT)
-        doc.text(lot.name, marginL + 5, y + 10)
+        doc.text(pdf(lot.name), marginL + 5, y + 10)
 
-        // Dates + zone (droite)
+        // Dates + zone (droite) — "du X au Y" sans caractère Unicode
         doc.setFontSize(7)
         doc.setFont('helvetica', 'normal')
         setTextColor(COLOR_MUTED)
-        const dateStr = `${fmtDate(lot.start_date_planned || lot.start_date_actual)} → ${fmtDate(lot.end_date_planned || lot.end_date_actual)}`
-        doc.text(dateStr, W - marginR, y + 5, { align: 'right' })
+        const dStart = fmtDate(lot.start_date_planned || lot.start_date_actual)
+        const dEnd   = fmtDate(lot.end_date_planned   || lot.end_date_actual)
+        const dateStr = (dStart !== '—' || dEnd !== '—') ? `du ${dStart} au ${dEnd}` : ''
+        if (dateStr) doc.text(dateStr, W - marginR, y + 5, { align: 'right' })
         if (lot.zone) doc.text(`Zone : ${lot.zone}`, W - marginR, y + 9, { align: 'right' })
 
         // Barre progression lot
@@ -294,36 +307,41 @@ export default function ProjectReport() {
 
         y += 18
 
-        // Notes lot
+        // Notes lot — cadre noir gras, pas de fond
         if (lot.notes) {
-          checkPage(10)
-          setFill('#fef9c3')
-          setDraw('#fde68a')
-          doc.roundedRect(marginL + 4, y, contentW - 4, 8, 1, 1, 'FD')
-          doc.setFontSize(7)
+          const noteLines = doc.splitTextToSize(pdf(lot.notes), contentW - 10)
+          const visibleLines = Math.min(noteLines.length, 8)
+          const noteH = visibleLines * 3.8 + 7
+          checkPage(noteH + 3)
+          doc.setLineWidth(0.6)
+          setDraw('#000000')
+          doc.setFillColor(255, 255, 255)
+          doc.roundedRect(marginL + 4, y, contentW - 4, noteH, 1, 1, 'FD')
+          doc.setLineWidth(0.2)
+          // Label + horodatage
+          doc.setFontSize(6.5)
           doc.setFont('helvetica', 'bold')
-          setTextColor('#92400e')
-          doc.text('Note lot : ', marginL + 6, y + 4)
+          setTextColor(COLOR_TEXT)
+          doc.text('Note du lot :', marginL + 6, y + 4.5)
+          if (lot.notes_updated_at) {
+            doc.setFont('helvetica', 'normal')
+            setTextColor(COLOR_MUTED)
+            const ts = new Date(lot.notes_updated_at).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+            doc.text(`Modifié le ${ts}`, W - marginR, y + 4.5, { align: 'right' })
+          }
+          // Contenu
           doc.setFont('helvetica', 'normal')
           setTextColor(COLOR_TEXT)
-          const noteLines = doc.splitTextToSize(lot.notes, contentW - 30)
-          doc.text(noteLines[0] + (noteLines.length > 1 ? ' …' : ''), marginL + 20, y + 4)
-          y += 10
-          // Si la note est longue, afficher plus de lignes
-          if (noteLines.length > 1) {
-            checkPage(noteLines.length * 3.5 + 2)
-            setFill('#fef9c3')
-            setDraw('#fde68a')
-            const h = Math.min(noteLines.length - 1, 5) * 3.5 + 4
-            doc.roundedRect(marginL + 4, y - 2, contentW - 4, h, 1, 1, 'FD')
-            doc.setFontSize(7)
-            doc.setFont('helvetica', 'normal')
-            setTextColor(COLOR_TEXT)
-            for (let i = 1; i < Math.min(noteLines.length, 6); i++) {
-              doc.text(noteLines[i], marginL + 6, y + (i - 1) * 3.5 + 2)
-            }
-            y += h + 2
+          doc.setFontSize(7.5)
+          for (let i = 0; i < visibleLines; i++) {
+            doc.text(noteLines[i], marginL + 6, y + 8.5 + i * 3.8)
           }
+          if (noteLines.length > 8) {
+            setTextColor(COLOR_MUTED)
+            doc.setFontSize(6.5)
+            doc.text('...', marginL + 6, y + noteH - 1.5)
+          }
+          y += noteH + 3
         }
 
         // ── Sous-tâches ──
@@ -356,14 +374,16 @@ export default function ProjectReport() {
           doc.setFontSize(8)
           doc.setFont('helvetica', 'normal')
           setTextColor(COLOR_TEXT)
-          const nameLines = doc.splitTextToSize(task.name, contentW - 70)
+          const nameLines = doc.splitTextToSize(pdf(task.name), contentW - 70)
           doc.text(nameLines[0], marginL + 16, y + 4)
 
-          // Dates tâche
+          // Dates tâche — "du X au Y" sans caractère Unicode
           doc.setFontSize(6.5)
           setTextColor(COLOR_MUTED)
+          const tDateStart = fmtDate(task.start_date)
+          const tDateEnd   = fmtDate(task.end_date)
           const tDate = task.start_date || task.end_date
-            ? `${fmtDate(task.start_date)} → ${fmtDate(task.end_date)}`
+            ? `du ${tDateStart} au ${tDateEnd}`
             : ''
           if (tDate) doc.text(tDate, marginL + 16, y + 7.5)
 
@@ -382,19 +402,32 @@ export default function ProjectReport() {
 
           y += 11
 
-          // Commentaire sous-tâche
+          // Commentaire sous-tâche — cadre noir gras, fond blanc, horodatage
           if (task.notes) {
-            checkPage(8)
-            setFill('#f0fdf4')
-            setDraw('#bbf7d0')
-            const cLines = doc.splitTextToSize(task.notes, contentW - 22)
-            const cH = Math.min(cLines.length, 4) * 3.5 + 4
+            const cLines = doc.splitTextToSize(pdf(task.notes), contentW - 22)
+            const visibleC = Math.min(cLines.length, 4)
+            const cH = visibleC * 3.5 + 7
+            checkPage(cH + 2)
+            doc.setLineWidth(0.6)
+            setDraw('#000000')
+            doc.setFillColor(255, 255, 255)
             doc.roundedRect(marginL + 13, y - 1, contentW - 13, cH, 0.8, 0.8, 'FD')
+            doc.setLineWidth(0.2)
             doc.setFontSize(6.5)
-            doc.setFont('helvetica', 'italic')
-            setTextColor('#166534')
-            for (let i = 0; i < Math.min(cLines.length, 4); i++) {
-              doc.text(`💬 ${i === 0 ? '' : ''}${cLines[i]}`, marginL + 15, y + i * 3.5 + 2)
+            doc.setFont('helvetica', 'bold')
+            setTextColor(COLOR_TEXT)
+            doc.text('Note :', marginL + 15, y + 3)
+            if (task.notes_updated_at) {
+              doc.setFont('helvetica', 'normal')
+              setTextColor(COLOR_MUTED)
+              const ts = new Date(task.notes_updated_at).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+              doc.text(`Modifié le ${ts}`, W - marginR, y + 3, { align: 'right' })
+            }
+            doc.setFont('helvetica', 'normal')
+            setTextColor(COLOR_TEXT)
+            doc.setFontSize(7)
+            for (let i = 0; i < visibleC; i++) {
+              doc.text(cLines[i], marginL + 15, y + 6.5 + i * 3.5)
             }
             y += cH + 2
           }
@@ -514,13 +547,16 @@ export default function ProjectReport() {
                       {lot.zone && <span className="text-xs bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded">{lot.zone}</span>}
                     </div>
                     <p className="text-xs text-gray-400 mb-2">
-                      {fmtDate(lot.start_date_planned)} → {fmtDate(lot.end_date_planned)}
+                      {lot.start_date_planned || lot.end_date_planned
+                        ? `du ${fmtDate(lot.start_date_planned)} au ${fmtDate(lot.end_date_planned)}`
+                        : ''}
                       {lot.duration_days ? ` · ${lot.duration_days}j` : ''}
                     </p>
                     <ProgressBar pct={pct} color={lot.color} />
                     {lot.notes && (
-                      <div className="mt-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-1.5 italic">
-                        📝 {lot.notes}
+                      <div className="mt-2 text-xs text-gray-700 bg-white border-2 border-black rounded px-3 py-1.5">
+                        <span className="font-bold">Note :</span> {lot.notes}
+                        {lot.notes_updated_at && <span className="ml-2 text-gray-400 font-normal not-italic">· Modifié le {new Date(lot.notes_updated_at).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>}
                       </div>
                     )}
                   </div>
@@ -542,13 +578,14 @@ export default function ProjectReport() {
                               <div className="flex-1 min-w-0">
                                 <p className="text-sm font-medium text-gray-800">{task.name}</p>
                                 <p className="text-xs text-gray-400">
-                                  {task.start_date ? fmtDate(task.start_date) : ''}
-                                  {task.start_date && task.end_date ? ' → ' : ''}
-                                  {task.end_date ? fmtDate(task.end_date) : ''}
+                                  {task.start_date || task.end_date
+                                    ? `du ${fmtDate(task.start_date)} au ${fmtDate(task.end_date)}`
+                                    : ''}
                                 </p>
                                 {task.notes && (
-                                  <p className="text-xs text-green-700 bg-green-50 border border-green-200 rounded px-2 py-1 mt-1 italic">
-                                    💬 {task.notes}
+                                  <p className="text-xs text-gray-700 bg-white border-2 border-black rounded px-2 py-1 mt-1">
+                                    <span className="font-bold">Note :</span> {task.notes}
+                                    {task.notes_updated_at && <span className="ml-1 text-gray-400 font-normal">· Modifié le {new Date(task.notes_updated_at).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>}
                                   </p>
                                 )}
                               </div>

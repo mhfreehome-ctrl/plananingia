@@ -44,7 +44,7 @@ lotTasks.get('/projects/:id/lot-tasks', requireAuth, async (c) => {
   const user = c.get('user')
   if (user.company_id) {
     const proj = await c.env.DB.prepare('SELECT company_id FROM projects WHERE id = ?').bind(id).first<any>()
-    if (!proj || proj.company_id !== user.company_id) return c.json({ error: 'Forbidden' }, 403)
+    if (!proj || (proj.company_id !== null && proj.company_id !== user.company_id)) return c.json({ error: 'Forbidden' }, 403)
   }
   const rows = await c.env.DB.prepare(`
     SELECT lt.*, u.first_name || ' ' || COALESCE(u.last_name,'') as subcontractor_name
@@ -90,9 +90,12 @@ lotTasks.put('/lot-tasks/:id', requireAdmin, async (c) => {
   if (!await assertTaskOwnership(c.env.DB, id, user.company_id)) return c.json({ error: 'Forbidden' }, 403)
   const body = await c.req.json()
   const notes = body.notes !== undefined ? (body.notes ? String(body.notes).slice(0, 1500) : null) : undefined
-  await c.env.DB.prepare(
-    'UPDATE lot_tasks SET name=?, type=?, start_date=?, end_date=?, progress=?, subcontractor_id=?, sort_order=?, notes=? WHERE id=?'
-  ).bind(
+  const notesTrimmed = notes ?? null
+  await c.env.DB.prepare(`
+    UPDATE lot_tasks SET name=?, type=?, start_date=?, end_date=?, progress=?, subcontractor_id=?, sort_order=?, notes=?,
+      notes_updated_at=CASE WHEN notes != ? OR (notes IS NULL AND ? IS NOT NULL) OR (notes IS NOT NULL AND ? IS NULL) THEN datetime('now') ELSE notes_updated_at END
+    WHERE id=?
+  `).bind(
     body.name,
     body.type || 'custom',
     body.start_date || null,
@@ -100,7 +103,8 @@ lotTasks.put('/lot-tasks/:id', requireAdmin, async (c) => {
     body.progress ?? 0,
     body.subcontractor_id || null,
     body.sort_order || 0,
-    notes ?? null,
+    notesTrimmed,
+    notesTrimmed, notesTrimmed, notesTrimmed,
     id
   ).run()
   const row = await c.env.DB.prepare('SELECT * FROM lot_tasks WHERE id = ?').bind(id).first()
