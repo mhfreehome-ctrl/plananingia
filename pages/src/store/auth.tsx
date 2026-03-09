@@ -23,58 +23,45 @@ interface AuthStore {
   setUser: (u: AuthUser) => void
 }
 
+function parseUser(raw: any): AuthUser {
+  return {
+    ...raw,
+    company_lot_types: raw.company_lot_types
+      ? (typeof raw.company_lot_types === 'string'
+          ? JSON.parse(raw.company_lot_types)
+          : raw.company_lot_types)
+      : null,
+  }
+}
+
 export const useAuth = create<AuthStore>((set) => ({
   user: null,
   loading: true,
 
   init: async () => {
-    const token = localStorage.getItem('planningIA_token')
-    if (!token) { set({ loading: false }); return }
+    // Pas de vérification localStorage — le cookie HttpOnly est envoyé automatiquement
     try {
       const raw = await api.auth.me()
-      // Parser company_lot_types depuis JSON string si besoin
-      const user: AuthUser = {
-        ...raw,
-        company_lot_types: raw.company_lot_types
-          ? (typeof raw.company_lot_types === 'string'
-              ? JSON.parse(raw.company_lot_types)
-              : raw.company_lot_types)
-          : null,
-      }
-      set({ user, loading: false })
+      set({ user: parseUser(raw), loading: false })
     } catch {
-      localStorage.removeItem('planningIA_token')
-      localStorage.removeItem('planningIA_refresh')
       set({ user: null, loading: false })
     }
   },
 
   login: async (email, password) => {
+    // Les cookies access_token et refresh_token sont posés par le serveur
     const data = await api.auth.login(email, password)
-    localStorage.setItem('planningIA_token', data.access_token)
-    localStorage.setItem('planningIA_refresh', data.refresh_token)
-    // Pour le login, les champs company viennent du /me — on stocke user basique
-    // puis on recharge le profil complet
-    set({ user: { ...data.user, company_id: data.user.company_id || null, company_type: data.user.company_type || null, company_activity: null, company_lot_types: null, company_display_name: null } })
-    // Recharge le profil complet avec les infos entreprise
+    // data.user contient le profil de base — on recharge le profil complet via /me
+    set({ user: { ...data.user, company_activity: null, company_lot_types: null, company_display_name: null } })
     try {
       const raw = await api.auth.me()
-      const user: AuthUser = {
-        ...raw,
-        company_lot_types: raw.company_lot_types
-          ? (typeof raw.company_lot_types === 'string'
-              ? JSON.parse(raw.company_lot_types)
-              : raw.company_lot_types)
-          : null,
-      }
-      set({ user })
+      set({ user: parseUser(raw) })
     } catch {}
   },
 
   logout: async () => {
     try { await api.auth.logout() } catch {}
-    localStorage.removeItem('planningIA_token')
-    localStorage.removeItem('planningIA_refresh')
+    // Les cookies sont effacés côté serveur
     set({ user: null })
   },
 

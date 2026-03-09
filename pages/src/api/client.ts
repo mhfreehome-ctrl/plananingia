@@ -2,43 +2,32 @@ const BASE = import.meta.env.PROD
   ? 'https://planningai-api.mhfreehome.workers.dev/api'
   : '/api'
 
-function getToken() {
-  return localStorage.getItem('planningIA_token')
-}
-
 async function req<T>(method: string, path: string, body?: unknown): Promise<T> {
-  const token = getToken()
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-  if (token) headers['Authorization'] = `Bearer ${token}`
-
   const res = await fetch(`${BASE}${path}`, {
     method,
-    headers,
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include', // cookies HttpOnly envoyés automatiquement
     body: body ? JSON.stringify(body) : undefined,
   })
 
   if (res.status === 401) {
-    // Try refresh
-    const refreshToken = localStorage.getItem('planningIA_refresh')
-    if (refreshToken) {
-      const r = await fetch(`${BASE}/auth/refresh`, {
-        method: 'POST',
+    // Tentative de refresh silencieux — le cookie refresh_token est envoyé automatiquement
+    const r = await fetch(`${BASE}/auth/refresh`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+    })
+    if (r.ok) {
+      // Retry la requête originale avec le nouveau cookie access_token
+      const res2 = await fetch(`${BASE}${path}`, {
+        method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ refresh_token: refreshToken }),
+        credentials: 'include',
+        body: body ? JSON.stringify(body) : undefined,
       })
-      if (r.ok) {
-        const data = await r.json() as any
-        localStorage.setItem('planningIA_token', data.access_token)
-        localStorage.setItem('planningIA_refresh', data.refresh_token)
-        // Retry
-        const headers2: Record<string, string> = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${data.access_token}` }
-        const res2 = await fetch(`${BASE}${path}`, { method, headers: headers2, body: body ? JSON.stringify(body) : undefined })
-        if (!res2.ok) throw new Error(await res2.text())
-        return res2.json() as Promise<T>
-      }
+      if (!res2.ok) throw new Error(await res2.text())
+      return res2.json() as Promise<T>
     }
-    localStorage.removeItem('planningIA_token')
-    localStorage.removeItem('planningIA_refresh')
     window.location.href = '/login'
     throw new Error('Unauthorized')
   }
