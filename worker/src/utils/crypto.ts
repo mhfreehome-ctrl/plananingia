@@ -1,3 +1,5 @@
+// 100k = plafond Workers Standard (50ms CPU) : verify(100k)+hash(100k)=200k total
+// Pour augmenter : passer en Workers Unbound (OWASP recommande 600k)
 const ITERATIONS = 100_000
 const HASH_ALG = 'SHA-256'
 
