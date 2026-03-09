@@ -42,6 +42,11 @@ lotAssignments.get('/lots/:id/assignments', requireAuth, async (c) => {
 // GET /api/projects/:id/lot-assignments — all assignments for all lots of a project
 lotAssignments.get('/projects/:id/lot-assignments', requireAuth, async (c) => {
   const { id } = c.req.param()
+  const user = c.get('user')
+  if (user.company_id) {
+    const proj = await c.env.DB.prepare('SELECT company_id FROM projects WHERE id = ?').bind(id).first<any>()
+    if (!proj || proj.company_id !== user.company_id) return c.json({ error: 'Forbidden' }, 403)
+  }
   const rows = await c.env.DB.prepare(`
     SELECT la.*, u.first_name || ' ' || COALESCE(u.last_name,'') as subcontractor_name,
            u.company_name

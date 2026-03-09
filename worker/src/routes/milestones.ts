@@ -8,6 +8,11 @@ const milestones = new Hono<{ Bindings: Env }>()
 // GET /api/projects/:id/milestones
 milestones.get('/projects/:id/milestones', requireAuth, async (c) => {
   const { id } = c.req.param()
+  const user = c.get('user')
+  if (user.company_id) {
+    const proj = await c.env.DB.prepare('SELECT company_id FROM projects WHERE id = ?').bind(id).first<any>()
+    if (!proj || proj.company_id !== user.company_id) return c.json({ error: 'Forbidden' }, 403)
+  }
   const rows = await c.env.DB.prepare(
     'SELECT * FROM milestones WHERE project_id = ? ORDER BY date ASC'
   ).bind(id).all()
@@ -17,6 +22,11 @@ milestones.get('/projects/:id/milestones', requireAuth, async (c) => {
 // POST /api/projects/:id/milestones
 milestones.post('/projects/:id/milestones', requireAdmin, async (c) => {
   const { id } = c.req.param()
+  const user = c.get('user')
+  if (user.company_id) {
+    const proj = await c.env.DB.prepare('SELECT company_id FROM projects WHERE id = ?').bind(id).first<any>()
+    if (!proj || proj.company_id !== user.company_id) return c.json({ error: 'Forbidden' }, 403)
+  }
   const body = await c.req.json()
   if (!body.name || !body.date) return c.json({ error: 'name and date are required' }, 400)
   const mid = generateId('ms')

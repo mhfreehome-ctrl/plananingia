@@ -45,6 +45,10 @@ lots.get('/lots/catalog', requireAuth, async (c) => {
 lots.post('/projects/:id/lots/from-catalog', requireAdmin, async (c) => {
   const { id } = c.req.param()
   const user = c.get('user')
+  if (user.company_id) {
+    const proj = await c.env.DB.prepare('SELECT company_id FROM projects WHERE id = ?').bind(id).first<any>()
+    if (!proj || proj.company_id !== user.company_id) return c.json({ error: 'Forbidden' }, 403)
+  }
   const { codes } = await c.req.json() as { codes: string[] }
   if (!codes?.length) return c.json({ ok: true, added: 0 })
 
@@ -122,6 +126,11 @@ lots.post('/projects/:id/lots/from-catalog', requireAdmin, async (c) => {
 // GET /api/projects/:id/lots
 lots.get('/projects/:id/lots', requireAuth, async (c) => {
   const { id } = c.req.param()
+  const user = c.get('user')
+  if (user.company_id) {
+    const proj = await c.env.DB.prepare('SELECT company_id FROM projects WHERE id = ?').bind(id).first<any>()
+    if (!proj || proj.company_id !== user.company_id) return c.json({ error: 'Forbidden' }, 403)
+  }
   const rows = await c.env.DB.prepare(`
     SELECT l.*,
       u.first_name || ' ' || COALESCE(u.last_name,'') as subcontractor_name,
@@ -140,6 +149,11 @@ lots.get('/projects/:id/lots', requireAuth, async (c) => {
 lots.post('/projects/:id/lots/init', requireAdmin, async (c) => {
   const { id } = c.req.param()
   const user = c.get('user')
+
+  if (user.company_id) {
+    const projCheck = await c.env.DB.prepare('SELECT company_id FROM projects WHERE id = ?').bind(id).first<any>()
+    if (!projCheck || projCheck.company_id !== user.company_id) return c.json({ error: 'Forbidden' }, 403)
+  }
 
   const existing = await c.env.DB.prepare('SELECT COUNT(*) as cnt FROM lots WHERE project_id = ?').bind(id).first<any>()
   if (existing?.cnt > 0) return c.json({ error: 'Lots already initialized' }, 409)
@@ -331,6 +345,11 @@ lots.post('/projects/:id/lots/train', requireAdmin, async (c) => {
 // POST /api/projects/:id/lots  — create single lot
 lots.post('/projects/:id/lots', requireAdmin, async (c) => {
   const { id } = c.req.param()
+  const user = c.get('user')
+  if (user.company_id) {
+    const proj = await c.env.DB.prepare('SELECT company_id FROM projects WHERE id = ?').bind(id).first<any>()
+    if (!proj || proj.company_id !== user.company_id) return c.json({ error: 'Forbidden' }, 403)
+  }
   const body = await c.req.json()
   const lid = generateId('lot')
   await c.env.DB.prepare(
@@ -517,6 +536,12 @@ lots.patch('/lots/:id/progress', requireAuth, async (c) => {
   if (!lot) return c.json({ error: 'Not found' }, 404)
   if (user.role === 'subcontractor' && lot.subcontractor_id !== user.sub)
     return c.json({ error: 'Forbidden' }, 403)
+  if (user.role === 'admin' && user.company_id) {
+    const lotOwner = await c.env.DB.prepare(
+      'SELECT p.company_id FROM lots l JOIN projects p ON p.id = l.project_id WHERE l.id = ?'
+    ).bind(id).first<any>()
+    if (!lotOwner || lotOwner.company_id !== user.company_id) return c.json({ error: 'Forbidden' }, 403)
+  }
 
   const pct = Math.min(100, Math.max(0, progress_percent))
   const newStatus = status || (pct >= 100 ? 'done' : pct > 0 ? 'active' : lot.status)
@@ -564,6 +589,11 @@ lots.patch('/lots/:id/progress', requireAuth, async (c) => {
 // GET /api/projects/:id/dependencies
 lots.get('/projects/:id/dependencies', requireAuth, async (c) => {
   const { id } = c.req.param()
+  const user = c.get('user')
+  if (user.company_id) {
+    const proj = await c.env.DB.prepare('SELECT company_id FROM projects WHERE id = ?').bind(id).first<any>()
+    if (!proj || proj.company_id !== user.company_id) return c.json({ error: 'Forbidden' }, 403)
+  }
   const rows = await c.env.DB.prepare('SELECT * FROM dependencies WHERE project_id = ?').bind(id).all()
   return c.json(rows.results)
 })
@@ -571,6 +601,11 @@ lots.get('/projects/:id/dependencies', requireAuth, async (c) => {
 // POST /api/projects/:id/dependencies
 lots.post('/projects/:id/dependencies', requireAdmin, async (c) => {
   const { id } = c.req.param()
+  const user = c.get('user')
+  if (user.company_id) {
+    const proj = await c.env.DB.prepare('SELECT company_id FROM projects WHERE id = ?').bind(id).first<any>()
+    if (!proj || proj.company_id !== user.company_id) return c.json({ error: 'Forbidden' }, 403)
+  }
   const body = await c.req.json()
   const did = generateId('dep')
   try {
