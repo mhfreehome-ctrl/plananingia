@@ -2,32 +2,56 @@ const BASE = import.meta.env.PROD
   ? 'https://planningai-api.mhfreehome.workers.dev/api'
   : '/api'
 
+const TOKEN_KEY = 'planningai_access_token'
+const REFRESH_KEY = 'planningai_refresh_token'
+
+export function saveTokens(access: string, refresh: string) {
+  localStorage.setItem(TOKEN_KEY, access)
+  localStorage.setItem(REFRESH_KEY, refresh)
+}
+
+export function clearTokens() {
+  localStorage.removeItem(TOKEN_KEY)
+  localStorage.removeItem(REFRESH_KEY)
+}
+
+function buildHeaders(extra?: Record<string, string>): Record<string, string> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json', ...extra }
+  const token = localStorage.getItem(TOKEN_KEY)
+  if (token) headers['Authorization'] = `Bearer ${token}`
+  return headers
+}
+
 async function req<T>(method: string, path: string, body?: unknown): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     method,
-    headers: { 'Content-Type': 'application/json' },
-    credentials: 'include', // cookies HttpOnly envoyés automatiquement
+    headers: buildHeaders(),
     body: body ? JSON.stringify(body) : undefined,
   })
 
   if (res.status === 401) {
-    // Tentative de refresh silencieux — le cookie refresh_token est envoyé automatiquement
-    const r = await fetch(`${BASE}/auth/refresh`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-    })
-    if (r.ok) {
-      // Retry la requête originale avec le nouveau cookie access_token
-      const res2 = await fetch(`${BASE}${path}`, {
-        method,
+    // Tentative de refresh silencieux avec le refresh_token stocké
+    const refreshToken = localStorage.getItem(REFRESH_KEY)
+    if (refreshToken) {
+      const r = await fetch(`${BASE}/auth/refresh`, {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: body ? JSON.stringify(body) : undefined,
+        body: JSON.stringify({ refresh_token: refreshToken }),
       })
-      if (!res2.ok) throw new Error(await res2.text())
-      return res2.json() as Promise<T>
+      if (r.ok) {
+        const data = await r.json() as { access_token: string; refresh_token: string }
+        saveTokens(data.access_token, data.refresh_token)
+        // Retry la requête originale avec le nouveau token
+        const res2 = await fetch(`${BASE}${path}`, {
+          method,
+          headers: buildHeaders(),
+          body: body ? JSON.stringify(body) : undefined,
+        })
+        if (!res2.ok) throw new Error(await res2.text())
+        return res2.json() as Promise<T>
+      }
     }
+    clearTokens()
     // Ne pas rediriger si déjà sur /login — évite la boucle infinie
     if (window.location.pathname !== '/login') window.location.href = '/login'
     throw new Error('Unauthorized')

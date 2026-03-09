@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { api } from '../api/client'
+import { api, saveTokens, clearTokens } from '../api/client'
 
 interface AuthUser {
   id: string; email: string; role: 'admin' | 'subcontractor'
@@ -39,7 +39,7 @@ export const useAuth = create<AuthStore>((set) => ({
   loading: true,
 
   init: async () => {
-    // Pas de vérification localStorage — le cookie HttpOnly est envoyé automatiquement
+    // Le token localStorage est envoyé automatiquement via buildHeaders() dans client.ts
     try {
       const raw = await api.auth.me()
       set({ user: parseUser(raw), loading: false })
@@ -49,19 +49,17 @@ export const useAuth = create<AuthStore>((set) => ({
   },
 
   login: async (email, password) => {
-    // Les cookies access_token et refresh_token sont posés par le serveur
     const data = await api.auth.login(email, password)
-    // data.user contient le profil de base — on recharge le profil complet via /me
-    set({ user: { ...data.user, company_activity: null, company_lot_types: null, company_display_name: null } })
-    try {
-      const raw = await api.auth.me()
-      set({ user: parseUser(raw) })
-    } catch {}
+    // Persist tokens for cross-session + mobile compatibility
+    saveTokens(data.access_token, data.refresh_token)
+    // Recharge le profil complet via /me
+    const raw = await api.auth.me()
+    set({ user: parseUser(raw) })
   },
 
   logout: async () => {
     try { await api.auth.logout() } catch {}
-    // Les cookies sont effacés côté serveur
+    clearTokens()
     set({ user: null })
   },
 
