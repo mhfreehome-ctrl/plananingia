@@ -1132,11 +1132,9 @@ export default function GanttChart({ lots, deps, projectStartDate, lang = 'fr', 
                     )
                   })()}
 
-                  {/* Handles de reconnexion sur les embouts de la flèche survolée (mode Liaisons) */}
-                  {/* Rendus EN DERNIER pour être au-dessus des hover handles — visibles seulement quand hoveredDepId */}
-                  {linkMode && !linkDrag && hoveredDepId && (() => {
-                    const d = deps.find(dep => dep.id === hoveredDepId)
-                    if (!d) return null
+                  {/* Handles de reconnexion — TOUJOURS visibles en mode Liaisons, rendus EN DERNIER (z-order max) */}
+                  {/* r=6 < r=8 (création) : le centre = reconnexion, le bord extérieur = nouvelle liaison */}
+                  {linkMode && !linkDrag && deps.map(d => {
                     const from = lotMap[d.predecessor_id], to = lotMap[d.successor_id]
                     if (!from || !to) return null
                     const DEP_META: Record<string, { predHandle: 'start' | 'end'; succSide: 'start' | 'end' }> = {
@@ -1150,23 +1148,23 @@ export default function GanttChart({ lots, deps, projectStartDate, lang = 'fr', 
                     const color = DEP_COLORS[d.type] ?? '#94a3b8'
                     const tailX = meta.predHandle === 'end' ? from.x + from.w : from.x
                     const headX = meta.succSide === 'end' ? to.x + to.w : to.x
-                    const keepDep = () => { if (hovDepClearTimer.current) { clearTimeout(hovDepClearTimer.current); hovDepClearTimer.current = null }; setHoveredDepId(d.id) }
-                    const releaseDep = () => { hovDepClearTimer.current = setTimeout(() => setHoveredDepId(null), 120) }
                     return (
                       <g key={`reconn-${d.id}`}>
                         {/* Queue (côté pred) — glisser pour changer le prédécesseur */}
-                        <circle cx={tailX} cy={from.y} r={7} fill={color} stroke="white" strokeWidth="2"
+                        <circle cx={tailX} cy={from.y} r={6} fill={color} stroke="white" strokeWidth="1.5"
                           style={{ cursor: 'grab', pointerEvents: 'all' }}
-                          onMouseEnter={keepDep} onMouseLeave={releaseDep}
+                          onMouseEnter={() => { if (hovDepClearTimer.current) { clearTimeout(hovDepClearTimer.current); hovDepClearTimer.current = null }; setHoveredDepId(d.id) }}
+                          onMouseLeave={() => { hovDepClearTimer.current = setTimeout(() => setHoveredDepId(null), 120) }}
                           onMouseDown={(e) => startLinkDrag(e, d.successor_id, meta.succSide, tailX, from.y, {
                             depId: d.id, end: 'start', fixedLotId: d.successor_id, fixedSide: meta.succSide
                           })}>
                           <title>Déplacer la queue — changer le prédécesseur</title>
                         </circle>
                         {/* Tête (côté succ / arrowhead) — glisser pour changer le successeur */}
-                        <circle cx={headX} cy={to.y} r={7} fill="white" stroke={color} strokeWidth="2.5"
+                        <circle cx={headX} cy={to.y} r={6} fill="white" stroke={color} strokeWidth="2"
                           style={{ cursor: 'grab', pointerEvents: 'all' }}
-                          onMouseEnter={keepDep} onMouseLeave={releaseDep}
+                          onMouseEnter={() => { if (hovDepClearTimer.current) { clearTimeout(hovDepClearTimer.current); hovDepClearTimer.current = null }; setHoveredDepId(d.id) }}
+                          onMouseLeave={() => { hovDepClearTimer.current = setTimeout(() => setHoveredDepId(null), 120) }}
                           onMouseDown={(e) => startLinkDrag(e, d.predecessor_id, meta.predHandle, headX, to.y, {
                             depId: d.id, end: 'end', fixedLotId: d.predecessor_id
                           })}>
@@ -1174,7 +1172,7 @@ export default function GanttChart({ lots, deps, projectStartDate, lang = 'fr', 
                         </circle>
                       </g>
                     )
-                  })()}
+                  })}
 
                   {/* Ligne de dessin en cours */}
                   {linkDrag && (() => {
