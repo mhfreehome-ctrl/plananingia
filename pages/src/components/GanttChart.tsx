@@ -172,6 +172,7 @@ export default function GanttChart({ lots, deps, projectStartDate, lang = 'fr', 
   const [editDepLag, setEditDepLag] = useState(0)
   const linkDragRef = useRef<LinkDragState | null>(null)
   const lotMapRef = useRef<Record<string, { x: number; y: number; w: number }>>({})
+  const hoverClearTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const svgRef = useRef<SVGSVGElement>(null)
   const chartAreaRef = useRef<HTMLDivElement>(null)
   const ganttRef = useRef<HTMLDivElement>(null)
@@ -450,7 +451,7 @@ export default function GanttChart({ lots, deps, projectStartDate, lang = 'fr', 
       if (!area) return
       const rect = area.getBoundingClientRect()
       const cursorChartX = ev.clientX - rect.left + area.scrollLeft
-      const cursorChartY = ev.clientY - rect.top + area.scrollTop
+      const cursorChartY = ev.clientY - rect.top - 40 + area.scrollTop  // -40 = hauteur header colonnes
       let targetId: string | undefined
       for (const [id, pos] of Object.entries(lotMapRef.current)) {
         if (
@@ -464,16 +465,34 @@ export default function GanttChart({ lots, deps, projectStartDate, lang = 'fr', 
       setLinkDrag({ ...next })
     }
 
-    const onUp = async () => {
+    const onUp = async (ev: MouseEvent) => {
       window.removeEventListener('mousemove', onMove)
       window.removeEventListener('mouseup', onUp)
       const ld = linkDragRef.current
       linkDragRef.current = null
       setLinkDrag(null)
       setHoveredLotId(null)
-      if (!ld?.targetLotId || !onDependencyCreate) return
-      const predId = ld.handle === 'end' ? ld.sourceLotId : ld.targetLotId
-      const succId = ld.handle === 'end' ? ld.targetLotId : ld.sourceLotId
+      if (!ld || !onDependencyCreate) return
+      // Recalculer la cible depuis les coordonnées réelles du mouseup
+      // (plus fiable que ld.targetLotId qui peut être effacé par un mousemove parasite avant le mouseup)
+      const area = chartAreaRef.current
+      let targetId: string | undefined
+      if (area) {
+        const rect = area.getBoundingClientRect()
+        const upChartX = ev.clientX - rect.left + area.scrollLeft
+        const upChartY = ev.clientY - rect.top - 40 + area.scrollTop
+        for (const [id, pos] of Object.entries(lotMapRef.current)) {
+          if (id !== ld.sourceLotId &&
+              upChartX >= pos.x && upChartX <= pos.x + pos.w &&
+              upChartY >= pos.y - ROW_H / 2 + 6 && upChartY <= pos.y + ROW_H / 2 - 6
+          ) { targetId = id; break }
+        }
+      }
+      // Fallback : dernière cible connue (cas où le mouseup est hors barre mais targetLotId valide)
+      if (!targetId) targetId = ld.targetLotId
+      if (!targetId) return
+      const predId = ld.handle === 'end' ? ld.sourceLotId : targetId
+      const succId = ld.handle === 'end' ? targetId : ld.sourceLotId
       // Anti-doublon
       if (depsRef.current.find(d => d.predecessor_id === predId && d.successor_id === succId)) return
       // Anti-cycle
@@ -826,8 +845,8 @@ export default function GanttChart({ lots, deps, projectStartDate, lang = 'fr', 
                 return (
                   <div key={l.id}
                     style={{ position: 'absolute', top: y, left: 0, width: '100%', height: rh }}
-                    onMouseEnter={!drag && !linkDrag ? (e) => { setTooltip({ lot: l, x: e.clientX, y: e.clientY }); setHoveredLotId(l.id) } : undefined}
-                    onMouseLeave={!drag && !linkDrag ? () => { setTooltip(null); setHoveredLotId(null) } : undefined}>
+                    onMouseEnter={!drag && !linkDrag ? (e) => { if (hoverClearTimer.current) { clearTimeout(hoverClearTimer.current); hoverClearTimer.current = null } setTooltip({ lot: l, x: e.clientX, y: e.clientY }); setHoveredLotId(l.id) } : undefined}
+                    onMouseLeave={!drag && !linkDrag ? () => { setTooltip(null); hoverClearTimer.current = setTimeout(() => { setHoveredLotId(null) }, 80) } : undefined}>
                     {/* ── Couche 1 : fond pastel ── */}
                     <div style={{
                       position: 'absolute', left: x, top: l.parent_lot_id ? 10 : 8,
@@ -921,8 +940,10 @@ export default function GanttChart({ lots, deps, projectStartDate, lang = 'fr', 
               })}
 
               {/* ── SVG interactif : hit paths flèches + handles + ligne de dessin ── */}
+              {/* pointerEvents:'none' sur la SVG = ne bloque pas les onMouseEnter des lot-divs en dessous */}
+              {/* Les enfants qui ont besoin d'events (cercles, hit paths) surchargent avec leur propre pointerEvents */}
               {!readOnly && (
-                <svg style={{ position: 'absolute', top: 0, left: 0, width: totalW, height: totalH, overflow: 'visible' }}>
+                <svg style={{ position: 'absolute', top: 0, left: 0, width: totalW, height: totalH, overflow: 'visible', pointerEvents: 'none', zIndex: 10 }}>
 
                   {/* Hit paths invisibles sur les flèches existantes (clic + clic droit) */}
                   {deps.map(d => {
@@ -943,19 +964,25 @@ export default function GanttChart({ lots, deps, projectStartDate, lang = 'fr', 
                   })}
 
                   {/* Handles ○ au hover sur une barre de lot */}
+                  {/* pointerEvents:'all' sur chaque cercle surcharge le 'none' de la SVG parente */}
                   {!drag && !linkDrag && hoveredLotId && lotMap[hoveredLotId] && (() => {
                     const m = lotMap[hoveredLotId]
+                    const capturedId = hoveredLotId
                     return (
                       <g>
                         {/* Bord gauche → SS */}
                         <circle cx={m.x} cy={m.y} r={7} fill="white" stroke="#6366f1" strokeWidth="2"
-                          style={{ cursor: 'crosshair' }}
-                          onMouseDown={(e) => startLinkDrag(e, hoveredLotId!, 'start', m.x, m.y)} />
+                          style={{ cursor: 'crosshair', pointerEvents: 'all' }}
+                          onMouseEnter={() => { if (hoverClearTimer.current) { clearTimeout(hoverClearTimer.current); hoverClearTimer.current = null } }}
+                          onMouseLeave={() => { setHoveredLotId(null) }}
+                          onMouseDown={(e) => startLinkDrag(e, capturedId, 'start', m.x, m.y)} />
                         <title>Créer un lien SS (Début-Début)</title>
                         {/* Bord droit → FS */}
                         <circle cx={m.x + m.w} cy={m.y} r={7} fill="white" stroke="#6366f1" strokeWidth="2"
-                          style={{ cursor: 'crosshair' }}
-                          onMouseDown={(e) => startLinkDrag(e, hoveredLotId!, 'end', m.x + m.w, m.y)} />
+                          style={{ cursor: 'crosshair', pointerEvents: 'all' }}
+                          onMouseEnter={() => { if (hoverClearTimer.current) { clearTimeout(hoverClearTimer.current); hoverClearTimer.current = null } }}
+                          onMouseLeave={() => { setHoveredLotId(null) }}
+                          onMouseDown={(e) => startLinkDrag(e, capturedId, 'end', m.x + m.w, m.y)} />
                       </g>
                     )
                   })()}
