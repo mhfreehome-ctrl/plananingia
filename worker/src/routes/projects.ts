@@ -176,7 +176,8 @@ projects.post('/:id/duplicate', requireWrite, async (c) => {
   const user = c.get('user')
   if (user.company_id) {
     const proj = await c.env.DB.prepare('SELECT company_id FROM projects WHERE id = ?').bind(id).first<any>()
-    if (!proj || proj.company_id !== user.company_id) return c.json({ error: 'Forbidden' }, 403)
+    // company_id NULL = projet modèle global → duplicable par tous les admins
+    if (!proj || (proj.company_id !== null && proj.company_id !== user.company_id)) return c.json({ error: 'Forbidden' }, 403)
   }
   const src = await c.env.DB.prepare('SELECT * FROM projects WHERE id = ?').bind(id).first<any>()
   if (!src) return c.json({ error: 'Not found' }, 404)
@@ -244,7 +245,8 @@ projects.get('/:id/stats', requireAuth, async (c) => {
   // Vérif isolation company
   if (user.company_id) {
     const proj = await c.env.DB.prepare('SELECT company_id FROM projects WHERE id = ?').bind(id).first<any>()
-    if (!proj || proj.company_id !== user.company_id) return c.json({ error: 'Forbidden' }, 403)
+    // company_id NULL = projet modèle global → stats accessibles à tous les admins
+    if (!proj || (proj.company_id !== null && proj.company_id !== user.company_id)) return c.json({ error: 'Forbidden' }, 403)
   }
   const lots = await c.env.DB.prepare('SELECT status, progress_percent, is_critical FROM lots WHERE project_id = ?').bind(id).all()
   const rows = lots.results as any[]
