@@ -160,6 +160,12 @@ projects.delete('/:id', requireEditeur, async (c) => {
     const proj = await c.env.DB.prepare('SELECT company_id FROM projects WHERE id = ?').bind(id).first<any>()
     if (!proj || proj.company_id !== user.company_id) return c.json({ error: 'Forbidden' }, 403)
   }
+  // Suppression en cascade des tables enfants
+  await c.env.DB.prepare('DELETE FROM ai_sessions WHERE project_id = ?').bind(id).run()
+  await c.env.DB.prepare('DELETE FROM notifications WHERE project_id = ?').bind(id).run()
+  await c.env.DB.prepare('DELETE FROM milestones WHERE project_id = ?').bind(id).run()
+  await c.env.DB.prepare('DELETE FROM dependencies WHERE project_id = ?').bind(id).run()
+  await c.env.DB.prepare('DELETE FROM lots WHERE project_id = ?').bind(id).run()
   await c.env.DB.prepare('DELETE FROM projects WHERE id = ?').bind(id).run()
   return c.json({ ok: true })
 })

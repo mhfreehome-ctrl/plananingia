@@ -21,7 +21,14 @@ export default function Login() {
       const { user } = useAuth.getState()
       navigate(user?.role === 'admin' ? '/dashboard' : '/sub', { replace: true })
     } catch (e: any) {
-      setError(t('auth.error'))
+      const msg = e?.message || ''
+      if (msg.includes('Too many') || msg.includes('retry_after')) {
+        setError('Trop de tentatives — réessayez dans quelques minutes')
+      } else if (msg.includes('Internal server') || msg.includes('Request failed')) {
+        setError('Erreur serveur — réessayez dans un instant')
+      } else {
+        setError(t('auth.error'))
+      }
     } finally { setLoading(false) }
   }
 

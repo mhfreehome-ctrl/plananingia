@@ -29,7 +29,7 @@ function clearAuthCookies(c: any) {
 
 auth.post('/login', async (c) => {
   const ip = getClientIp(c.req.raw)
-  const retry = await checkRateLimit(c.env.KV, `rl:login:${ip}`, 5, 15 * 60 * 1000)
+  const retry = await checkRateLimit(c.env.KV, `rl:login:${ip}`, 10, 15 * 60 * 1000)
   if (retry !== null) return c.json({ error: 'Too many attempts, try again later', retry_after: retry }, 429)
 
   const { email, password } = await c.req.json()
@@ -62,8 +62,10 @@ auth.post('/login', async (c) => {
 
   setAuthCookies(c, access, refreshRaw)
 
-  // Tokens dans les cookies HttpOnly uniquement — réponse JSON contient uniquement le profil
+  // Retourne les tokens dans le body ET dans les cookies (rétrocompatibilité main + cookies develop)
   return c.json({
+    access_token: access,
+    refresh_token: refreshRaw,
     user: {
       id: user.id, email: user.email, role: user.role,
       first_name: user.first_name, last_name: user.last_name,
@@ -117,7 +119,8 @@ auth.post('/refresh', async (c) => {
   }, c.env.JWT_SECRET, ACCESS_TTL)
 
   setAuthCookies(c, access, newRaw)
-  return c.json({ ok: true })
+  // Retourne aussi les tokens dans le body pour rétrocompatibilité avec main (Bearer localStorage)
+  return c.json({ ok: true, access_token: access, refresh_token: newRaw })
 })
 
 auth.post('/logout', requireAuth, async (c) => {
