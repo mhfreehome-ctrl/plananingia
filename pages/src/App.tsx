@@ -37,7 +37,8 @@ function RequireAuth({ children, role }: { children: React.ReactNode; role?: 'ad
 
 export default function App() {
   const { init } = useAuth()
-  useEffect(() => { init() }, [init])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { init() }, [])
 
   return (
     <BrowserRouter>

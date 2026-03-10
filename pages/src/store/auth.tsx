@@ -39,6 +39,8 @@ export const useAuth = create<AuthStore>((set) => ({
   loading: true,
 
   init: async () => {
+    // Guard : si l'utilisateur est déjà défini (ex: login() vient de s'exécuter), on ne réécrase pas
+    if (useAuth.getState().user) { set({ loading: false }); return }
     // Cookies HttpOnly envoyés automatiquement — appel direct à /auth/me
     try {
       const raw = await api.auth.me()
