@@ -81,6 +81,11 @@ interface LinkDragState {
   targetLotId?: string       // Lot survolé = cible potentielle
   targetSide?: 'start' | 'end'  // Moitié gauche (start) ou droite (end) de la cible
   depType?: string              // Type déduit : 'FS'|'FF'|'SS'|'SF'
+  // Reconnect mode (déplacement d'un embout de liaison existante)
+  reconnectDepId?: string          // dep en cours de reconnexion
+  reconnectEnd?: 'start' | 'end'   // 'end'=tête/arrowhead (succ), 'start'=queue (pred)
+  reconnectFixedLotId?: string     // lot de l'extrémité FIXE
+  reconnectFixedSide?: 'start' | 'end'  // côté fixe du succ (pour reconnect queue)
 }
 
 type Zoom = 'day' | 'week' | 'month'
@@ -475,12 +480,21 @@ export default function GanttChart({ lots, deps, projectStartDate, lang = 'fr', 
     lotId: string,
     handle: 'start' | 'end',
     startX: number,
-    startY: number
+    startY: number,
+    reconnect?: { depId: string; end: 'start' | 'end'; fixedLotId: string; fixedSide?: 'start' | 'end' }
   ) {
     e.preventDefault()
     e.stopPropagation()
     setTooltip(null)
-    const state: LinkDragState = { sourceLotId: lotId, handle, startX, startY, cursorX: startX, cursorY: startY, targetLotId: undefined }
+    const state: LinkDragState = {
+      sourceLotId: lotId, handle, startX, startY, cursorX: startX, cursorY: startY, targetLotId: undefined,
+      ...(reconnect ? {
+        reconnectDepId: reconnect.depId,
+        reconnectEnd: reconnect.end,
+        reconnectFixedLotId: reconnect.fixedLotId,
+        reconnectFixedSide: reconnect.fixedSide,
+      } : {})
+    }
     linkDragRef.current = state
     setLinkDrag(state)
 
@@ -548,6 +562,32 @@ export default function GanttChart({ lots, deps, projectStartDate, lang = 'fr', 
       }
       // Fallback : côté connu pendant le drag
       if (!finalTargetSide) finalTargetSide = ld.targetSide ?? 'start'
+      // ── Mode reconnect : déplacer un embout de liaison existante ──
+      if (ld.reconnectDepId) {
+        if (!finalTargetSide) return
+        let newPredId: string, newSuccId: string, newType: string
+        if (ld.reconnectEnd === 'end') {
+          // Tête (succ) déplacée — pred fixe
+          newPredId = ld.reconnectFixedLotId!
+          newSuccId = targetId
+          newType = getDepType(ld.handle, finalTargetSide)
+        } else {
+          // Queue (pred) déplacée — succ fixe ; finalTargetSide = handle du nouveau pred
+          newPredId = targetId
+          newSuccId = ld.reconnectFixedLotId!
+          newType = getDepType(finalTargetSide, ld.reconnectFixedSide ?? 'start')
+        }
+        // Skip si aucun changement
+        const origDep = depsRef.current.find(d => d.id === ld.reconnectDepId)
+        if (origDep && origDep.predecessor_id === newPredId && origDep.successor_id === newSuccId && origDep.type === newType) return
+        // Anti-cycle (hors la liaison reconnectée)
+        if (wouldCreateCycle(newPredId, newSuccId, depsRef.current.filter(d => d.id !== ld.reconnectDepId))) return
+        await onDependencyDelete?.(ld.reconnectDepId)
+        await onDependencyCreate?.(newPredId, newSuccId, newType, 0)
+        return
+      }
+
+      // ── Création normale d'une nouvelle liaison ──
       const type = getDepType(ld.handle, finalTargetSide)
       const predId = ld.sourceLotId
       const succId = targetId
@@ -1052,6 +1092,43 @@ export default function GanttChart({ lots, deps, projectStartDate, lang = 'fr', 
                         onClick={(e) => { e.stopPropagation(); setEditDepType(d.type); setEditDepLag(d.lag_days); setEditingDep({ dep: d, x: e.clientX, y: e.clientY }) }}
                         onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); setContextMenu({ dep: d, x: e.clientX, y: e.clientY }) }}
                       />
+                    )
+                  })}
+
+                  {/* Handles de reconnexion sur les embouts des flèches existantes (mode Liaisons) */}
+                  {linkMode && !linkDrag && deps.map(d => {
+                    const from = lotMap[d.predecessor_id], to = lotMap[d.successor_id]
+                    if (!from || !to) return null
+                    const DEP_META: Record<string, { predHandle: 'start' | 'end'; succSide: 'start' | 'end' }> = {
+                      FS: { predHandle: 'end', succSide: 'start' },
+                      FF: { predHandle: 'end', succSide: 'end' },
+                      SS: { predHandle: 'start', succSide: 'start' },
+                      SF: { predHandle: 'start', succSide: 'end' },
+                    }
+                    const meta = DEP_META[d.type] ?? DEP_META['FS']
+                    const DEP_COLORS: Record<string, string> = { FS: '#94a3b8', FF: '#f97316', SS: '#10b981', SF: '#8b5cf6' }
+                    const color = DEP_COLORS[d.type] ?? '#94a3b8'
+                    const tailX = meta.predHandle === 'end' ? from.x + from.w : from.x
+                    const headX = meta.succSide === 'end' ? to.x + to.w : to.x
+                    return (
+                      <g key={`reconn-${d.id}`}>
+                        {/* Queue (côté pred) — glisser pour changer le prédécesseur */}
+                        <circle cx={tailX} cy={from.y} r={5} fill={color} stroke="white" strokeWidth="1.5"
+                          style={{ cursor: 'grab', pointerEvents: 'all' }}
+                          onMouseDown={(e) => startLinkDrag(e, d.successor_id, meta.succSide, tailX, from.y, {
+                            depId: d.id, end: 'start', fixedLotId: d.successor_id, fixedSide: meta.succSide
+                          })}>
+                          <title>Déplacer la queue — changer le prédécesseur</title>
+                        </circle>
+                        {/* Tête (côté succ / arrowhead) — glisser pour changer le successeur */}
+                        <circle cx={headX} cy={to.y} r={5} fill="white" stroke={color} strokeWidth="2"
+                          style={{ cursor: 'grab', pointerEvents: 'all' }}
+                          onMouseDown={(e) => startLinkDrag(e, d.predecessor_id, meta.predHandle, headX, to.y, {
+                            depId: d.id, end: 'end', fixedLotId: d.predecessor_id
+                          })}>
+                          <title>Déplacer la tête — changer le successeur</title>
+                        </circle>
+                      </g>
                     )
                   })}
 
