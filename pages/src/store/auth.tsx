@@ -41,23 +41,32 @@ export const useAuth = create<AuthStore>((set) => ({
   init: async () => {
     // Guard : si l'utilisateur est déjà défini (ex: login() vient de s'exécuter), on ne réécrase pas
     if (useAuth.getState().user) { set({ loading: false }); return }
-    // Cookies HttpOnly envoyés automatiquement — appel direct à /auth/me
+    // Pas de token en localStorage → pas de session active
+    const token = localStorage.getItem('access_token')
+    if (!token) { set({ loading: false }); return }
+    // Vérification de la session via /auth/me (Bearer envoyé par client.ts)
     try {
       const raw = await api.auth.me()
       set({ user: parseUser(raw), loading: false })
     } catch {
+      localStorage.removeItem('access_token')
+      localStorage.removeItem('refresh_token')
       set({ user: null, loading: false })
     }
   },
 
   login: async (email, password) => {
     const data = await api.auth.login(email, password)
-    // Cookies access_token + refresh_token posés par le worker (HttpOnly)
+    // Stocker les tokens en localStorage (Bearer) — cross-origin safe
+    if (data.access_token) localStorage.setItem('access_token', data.access_token)
+    if (data.refresh_token) localStorage.setItem('refresh_token', data.refresh_token)
     set({ user: parseUser(data.user), loading: false })
   },
 
   logout: async () => {
     try { await api.auth.logout() } catch {}
+    localStorage.removeItem('access_token')
+    localStorage.removeItem('refresh_token')
     set({ user: null })
   },
 

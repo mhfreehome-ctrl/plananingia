@@ -3,32 +3,48 @@ const BASE = import.meta.env.VITE_API_BASE ||
   (import.meta.env.PROD ? 'https://planningai-api.mhfreehome.workers.dev/api' : '/api')
 
 async function req<T>(method: string, path: string, body?: unknown): Promise<T> {
+  const token = localStorage.getItem('access_token')
+
   const res = await fetch(`${BASE}${path}`, {
     method,
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+    },
     credentials: 'include',
     body: body ? JSON.stringify(body) : undefined,
   })
 
   if (res.status === 401) {
-    // Tentative de refresh silencieux — cookie refresh_token envoyé automatiquement
+    // Tentative de refresh silencieux — localStorage refresh_token + cookie fallback
+    const refreshToken = localStorage.getItem('refresh_token')
     const r = await fetch(`${BASE}/auth/refresh`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
+      body: refreshToken ? JSON.stringify({ refresh_token: refreshToken }) : undefined,
     })
     if (r.ok) {
-      // Retry la requête originale avec le nouveau cookie access_token
+      const refreshData = await r.json() as any
+      if (refreshData.access_token) localStorage.setItem('access_token', refreshData.access_token)
+      if (refreshData.refresh_token) localStorage.setItem('refresh_token', refreshData.refresh_token)
+      const newToken = refreshData.access_token || localStorage.getItem('access_token')
+      // Retry la requête originale avec le nouveau token
       const res2 = await fetch(`${BASE}${path}`, {
         method,
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(newToken ? { 'Authorization': `Bearer ${newToken}` } : {}),
+        },
         credentials: 'include',
         body: body ? JSON.stringify(body) : undefined,
       })
       if (!res2.ok) throw new Error(await res2.text())
       return res2.json() as Promise<T>
     }
-    // Refresh échoué — redirection login (garde anti-boucle)
+    // Refresh échoué — nettoyer et rediriger login (garde anti-boucle)
+    localStorage.removeItem('access_token')
+    localStorage.removeItem('refresh_token')
     if (window.location.pathname !== '/login') window.location.href = '/login'
     throw new Error('Unauthorized')
   }
