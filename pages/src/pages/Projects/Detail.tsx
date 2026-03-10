@@ -318,6 +318,22 @@ export default function ProjectDetail() {
     await api.deps.delete(depId); await loadData()
   }
 
+  // Handlers pour la création/suppression/modification visuelle des liens sur le Gantt
+  const handleGanttDepCreate = async (predId: string, succId: string, type: string, lag: number) => {
+    await api.deps.create(id!, { predecessor_id: predId, successor_id: succId, type, lag_days: lag })
+    await loadData()
+  }
+  const handleGanttDepDelete = async (depId: string) => {
+    await api.deps.delete(depId); await loadData()
+  }
+  const handleGanttDepUpdate = async (depId: string, type: string, lag: number) => {
+    const dep = (deps as any[]).find((d: any) => d.id === depId)
+    if (!dep) return
+    await api.deps.delete(depId)
+    await api.deps.create(id!, { predecessor_id: dep.predecessor_id, successor_id: dep.successor_id, type, lag_days: lag })
+    await loadData()
+  }
+
   const handleSaveMilestone = async (e: React.FormEvent, form: any) => {
     e.preventDefault()
     try {
@@ -513,6 +529,9 @@ export default function ProjectDetail() {
             <GanttChart lots={lots} deps={deps} projectStartDate={project.start_date} lang={lang} projectId={id} onRefresh={loadData}
               milestones={milestones} onMilestoneClick={(m) => setMilestoneModal({ milestone: m, mode: 'edit' })}
               lotTasks={lotTasksMap} lotAssignments={lotAssignmentsMap}
+              onDependencyCreate={handleGanttDepCreate}
+              onDependencyDelete={handleGanttDepDelete}
+              onDependencyUpdate={handleGanttDepUpdate}
               onLotClick={(lotId) => {
                 const lot = lots.find((l: any) => l.id === lotId)
                 if (lot) {
