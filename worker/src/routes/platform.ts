@@ -132,6 +132,203 @@ platform.delete('/lot-template-deps/:id', requireSuperAdmin, async (c) => {
 })
 
 // ═══════════════════════════════════════════════════════════
+// LOT TEMPLATE TASKS (sous-tâches pour catalogues métier)
+// ═══════════════════════════════════════════════════════════
+
+// GET /api/platform/lot-template-tasks?catalog=...
+platform.get('/lot-template-tasks', requireAdmin, async (c) => {
+  const catalog = c.req.query('catalog') || ''
+  if (!catalog) return c.json({ error: 'catalog requis' }, 400)
+  const rows = await c.env.DB.prepare(`
+    SELECT ltt.*, lt.code as lot_code, lt.name as lot_name
+    FROM lot_template_tasks ltt
+    JOIN lot_templates lt ON lt.id = ltt.lot_template_id
+    WHERE lt.catalog_type = ?
+    ORDER BY lt.sort_order ASC, ltt.sort_order ASC
+  `).bind(catalog).all()
+  return c.json(rows.results)
+})
+
+// POST /api/platform/lot-template-tasks
+platform.post('/lot-template-tasks', requireSuperAdmin, async (c) => {
+  const body = await c.req.json() as any
+  if (!body.lot_template_id || !body.name) return c.json({ error: 'lot_template_id et name requis' }, 400)
+  const id = generateId('ltt')
+  await c.env.DB.prepare(`
+    INSERT INTO lot_template_tasks (id, lot_template_id, name, duration_days, sort_order)
+    VALUES (?, ?, ?, ?, ?)
+  `).bind(id, body.lot_template_id, body.name, body.duration_days || 1, body.sort_order ?? 0).run()
+  const row = await c.env.DB.prepare('SELECT * FROM lot_template_tasks WHERE id = ?').bind(id).first()
+  return c.json(row, 201)
+})
+
+// DELETE /api/platform/lot-template-tasks/:id
+platform.delete('/lot-template-tasks/:id', requireSuperAdmin, async (c) => {
+  await c.env.DB.prepare('DELETE FROM lot_template_tasks WHERE id = ?').bind(c.req.param('id')).run()
+  return c.json({ ok: true })
+})
+
+// ═══════════════════════════════════════════════════════════
+// TRADE CATALOGS (catalogues par corps de métier)
+// ═══════════════════════════════════════════════════════════
+
+// GET /api/platform/trade-catalogs — liste tous les catalogues métier (hors btp/facade)
+platform.get('/trade-catalogs', requireAdmin, async (c) => {
+  const rows = await c.env.DB.prepare(`
+    SELECT catalog_type, COUNT(*) as lot_count, MIN(created_at) as created_at
+    FROM lot_templates
+    WHERE catalog_type NOT IN ('btp', 'facade')
+    GROUP BY catalog_type
+    ORDER BY catalog_type ASC
+  `).all()
+  return c.json(rows.results)
+})
+
+// DELETE /api/platform/trade-catalogs/:trade_code — supprimer tout un catalogue métier
+platform.delete('/trade-catalogs/:trade_code', requireSuperAdmin, async (c) => {
+  const tradeCode = c.req.param('trade_code') as string
+  if (['btp', 'facade'].includes(tradeCode)) return c.json({ error: 'Impossible de supprimer les catalogues systèmes' }, 400)
+  // Supprimer dépendances, puis lots (les tasks CASCADE via FK)
+  await c.env.DB.prepare('DELETE FROM lot_template_deps WHERE catalog_type = ?').bind(tradeCode).run()
+  await c.env.DB.prepare('DELETE FROM lot_templates WHERE catalog_type = ?').bind(tradeCode).run()
+  return c.json({ ok: true })
+})
+
+// POST /api/platform/generate-trade-catalog — génération IA d'un catalogue métier
+platform.post('/generate-trade-catalog', requireSuperAdmin, async (c) => {
+  const body = await c.req.json() as any
+  const { trade_code, trade_name, description, overwrite } = body
+
+  if (!trade_code || !trade_name) return c.json({ error: 'trade_code et trade_name requis' }, 400)
+  if (['btp', 'facade'].includes(trade_code)) return c.json({ error: 'Code réservé' }, 400)
+
+  // Vérifier si catalog existe déjà
+  const existing = await c.env.DB.prepare(
+    'SELECT COUNT(*) as cnt FROM lot_templates WHERE catalog_type = ?'
+  ).bind(trade_code).first<any>()
+  if (existing?.cnt > 0 && !overwrite) {
+    return c.json({ error: 'Ce catalogue existe déjà. Utilisez overwrite: true pour le régénérer.' }, 409)
+  }
+
+  const prompt = `Tu es un expert BTP français. Génère un catalogue complet de lots et tâches pour le corps de métier suivant :
+
+Corps de métier : ${trade_name}
+Code : ${trade_code}
+${description ? `Description : ${description}` : ''}
+
+Génère une planification réaliste avec :
+- Entre 5 et 12 lots (phases de travail), chacun avec un code court (${trade_code.substring(0,2).toUpperCase()}01, ${trade_code.substring(0,2).toUpperCase()}02...), un nom en français, une durée standard en jours ouvrés, et une couleur hex adaptée.
+- Des dépendances FS (Fin→Début) ou SS (Début→Début) logiques entre les lots.
+- Pour chaque lot, 2 à 5 sous-tâches concrètes.
+
+Respecte la logique métier réelle (pré-études, approvisionnements, exécution, réception, levée de réserves).
+
+Réponds UNIQUEMENT en JSON valide, sans commentaires, sans markdown, sans balises :
+{
+  "lots": [
+    { "code": "XX01", "name": "...", "duration_days": 5, "color": "#hex", "sort_order": 1 }
+  ],
+  "deps": [
+    { "pred_code": "XX01", "succ_code": "XX02", "dep_type": "FS", "lag_days": 0 }
+  ],
+  "tasks": {
+    "XX01": ["Tâche 1", "Tâche 2"],
+    "XX02": ["Tâche A", "Tâche B", "Tâche C"]
+  }
+}`
+
+  const aiResp = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': c.env.CLAUDE_API_KEY,
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 4096,
+      messages: [{ role: 'user', content: prompt }],
+    }),
+  })
+
+  if (!aiResp.ok) {
+    const err = await aiResp.text()
+    return c.json({ error: `Erreur IA: ${err}` }, 502)
+  }
+
+  const aiData = await aiResp.json() as any
+  const rawContent = aiData.content?.[0]?.text || ''
+
+  let catalog: { lots: any[]; deps: any[]; tasks: Record<string, string[]> }
+  try {
+    const jsonMatch = rawContent.match(/\{[\s\S]*\}/)
+    if (!jsonMatch) throw new Error('Pas de JSON trouvé')
+    catalog = JSON.parse(jsonMatch[0])
+  } catch {
+    return c.json({ error: 'Réponse IA invalide', raw: rawContent }, 502)
+  }
+
+  // Si overwrite, supprimer l'existant
+  if (overwrite && existing?.cnt > 0) {
+    await c.env.DB.prepare('DELETE FROM lot_template_deps WHERE catalog_type = ?').bind(trade_code).run()
+    await c.env.DB.prepare('DELETE FROM lot_templates WHERE catalog_type = ?').bind(trade_code).run()
+  }
+
+  // Insérer les lots
+  const lotIdByCode: Record<string, string> = {}
+  for (const lot of catalog.lots || []) {
+    const id = generateId('lt')
+    lotIdByCode[lot.code] = id
+    await c.env.DB.prepare(`
+      INSERT OR IGNORE INTO lot_templates (id, catalog_type, code, name, duration_days, color, sort_order)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).bind(id, trade_code, lot.code, lot.name, lot.duration_days || 5, lot.color || '#6B7280', lot.sort_order || 0).run()
+  }
+
+  // Insérer les dépendances
+  for (const dep of catalog.deps || []) {
+    const id = generateId('ltd')
+    await c.env.DB.prepare(`
+      INSERT OR IGNORE INTO lot_template_deps (id, catalog_type, pred_code, succ_code, dep_type, lag_days)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).bind(id, trade_code, dep.pred_code, dep.succ_code, dep.dep_type || 'FS', dep.lag_days || 0).run()
+  }
+
+  // Insérer les tâches
+  for (const [lotCode, tasks] of Object.entries(catalog.tasks || {})) {
+    const lotId = lotIdByCode[lotCode]
+    if (!lotId) continue
+    for (let i = 0; i < (tasks as string[]).length; i++) {
+      const id = generateId('ltt')
+      await c.env.DB.prepare(`
+        INSERT INTO lot_template_tasks (id, lot_template_id, name, duration_days, sort_order)
+        VALUES (?, ?, ?, 1, ?)
+      `).bind(id, lotId, (tasks as string[])[i], i).run()
+    }
+  }
+
+  // Retourner le catalogue créé
+  const [lotsRes, depsRes, tasksRes] = await Promise.all([
+    c.env.DB.prepare('SELECT * FROM lot_templates WHERE catalog_type = ? ORDER BY sort_order ASC').bind(trade_code).all(),
+    c.env.DB.prepare('SELECT * FROM lot_template_deps WHERE catalog_type = ? ORDER BY pred_code ASC').bind(trade_code).all(),
+    c.env.DB.prepare(`
+      SELECT ltt.*, lt.code as lot_code
+      FROM lot_template_tasks ltt JOIN lot_templates lt ON lt.id = ltt.lot_template_id
+      WHERE lt.catalog_type = ? ORDER BY lt.sort_order ASC, ltt.sort_order ASC
+    `).bind(trade_code).all(),
+  ])
+
+  return c.json({
+    ok: true,
+    trade_code,
+    trade_name,
+    lots: lotsRes.results,
+    deps: depsRes.results,
+    tasks: tasksRes.results,
+  }, 201)
+})
+
+// ═══════════════════════════════════════════════════════════
 // MENU CONFIG
 // ═══════════════════════════════════════════════════════════
 

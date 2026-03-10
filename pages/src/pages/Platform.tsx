@@ -864,11 +864,315 @@ function TabStats() {
 }
 
 // ════════════════════════════════════════════════════════════
+// TAB 5 — Catalogues Métier (corps de métier IA)
+// ════════════════════════════════════════════════════════════
+
+const COMMON_TRADES = [
+  { code: 'electricien', name: 'Électricien', desc: 'Courant fort, courant faible, domotique' },
+  { code: 'plombier', name: 'Plombier / Sanitaire', desc: 'Plomberie, sanitaire, robinetterie' },
+  { code: 'peintre', name: 'Peintre', desc: 'Peinture intérieure et extérieure, revêtements' },
+  { code: 'menuisier', name: 'Menuisier', desc: 'Menuiseries intérieures et extérieures, agencement' },
+  { code: 'platrier', name: 'Plâtrier / Plaquiste', desc: 'Cloisons, faux-plafonds, isolation thermique' },
+  { code: 'carreleur', name: 'Carreleur', desc: 'Carrelage sols et murs, faïence, résine' },
+  { code: 'chauffagiste', name: 'Chauffagiste / CVC', desc: 'Chauffage, ventilation, climatisation' },
+  { code: 'serrurier', name: 'Serrurier / Métallier', desc: 'Ferronnerie, garde-corps, serrurerie' },
+]
+
+interface TradeCatalog {
+  catalog_type: string
+  lot_count: number
+  created_at: string
+}
+
+interface LotTemplateTask {
+  id: string
+  lot_template_id: string
+  lot_code: string
+  lot_name: string
+  name: string
+  duration_days: number
+  sort_order: number
+}
+
+function TabTradeCatalogs() {
+  const [catalogs, setCatalogs] = useState<TradeCatalog[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [showGenModal, setShowGenModal] = useState(false)
+  const [genForm, setGenForm] = useState({ trade_code: '', trade_name: '', description: '', overwrite: false })
+  const [generating, setGenerating] = useState(false)
+  const [genResult, setGenResult] = useState<any>(null)
+  const [expandedCatalog, setExpandedCatalog] = useState<string | null>(null)
+  const [expandData, setExpandData] = useState<{ lots: LotTemplate[]; deps: LotDep[]; tasks: LotTemplateTask[] } | null>(null)
+  const [expandLoading, setExpandLoading] = useState(false)
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    try {
+      const data = await api.platform.tradeCatalogs()
+      setCatalogs((data as any) || [])
+    } catch { setError('Erreur chargement') }
+    setLoading(false)
+  }, [])
+
+  useEffect(() => { load() }, [load])
+
+  const expandCatalog = async (tradeCode: string) => {
+    if (expandedCatalog === tradeCode) { setExpandedCatalog(null); setExpandData(null); return }
+    setExpandedCatalog(tradeCode)
+    setExpandLoading(true)
+    try {
+      const [tplData, tasks] = await Promise.all([
+        api.platform.lotTemplates(tradeCode as any),
+        api.platform.lotTemplateTasks(tradeCode),
+      ])
+      setExpandData({ lots: tplData.lots || [], deps: tplData.deps || [], tasks: (tasks as any) || [] })
+    } catch { setError('Erreur chargement catalogue') }
+    setExpandLoading(false)
+  }
+
+  const deleteCatalog = async (tradeCode: string) => {
+    if (!confirm(`Supprimer le catalogue "${tradeCode}" ? Tous les lots et tâches seront supprimés.`)) return
+    try {
+      await api.platform.deleteTradeCatalog(tradeCode)
+      if (expandedCatalog === tradeCode) { setExpandedCatalog(null); setExpandData(null) }
+      await load()
+    } catch (e: any) { setError(e.message) }
+  }
+
+  const startGen = (preset?: typeof COMMON_TRADES[0]) => {
+    setGenForm(preset
+      ? { trade_code: preset.code, trade_name: preset.name, description: preset.desc, overwrite: false }
+      : { trade_code: '', trade_name: '', description: '', overwrite: false }
+    )
+    setGenResult(null)
+    setShowGenModal(true)
+  }
+
+  const generate = async () => {
+    if (!genForm.trade_code || !genForm.trade_name) { setError('Code et nom requis'); return }
+    setGenerating(true); setError(''); setGenResult(null)
+    try {
+      const result = await api.platform.generateTradeCatalog(genForm)
+      setGenResult(result)
+      await load()
+    } catch (e: any) { setError(e.message || 'Erreur génération IA') }
+    setGenerating(false)
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="font-semibold text-gray-800">Catalogues par corps de métier</h3>
+          <p className="text-xs text-gray-500 mt-0.5">
+            L'IA génère des lots, tâches et dépendances pour chaque métier — utilisés pour créer automatiquement un planning depuis un devis.
+          </p>
+        </div>
+        <Btn onClick={() => startGen()}>+ Nouveau catalogue</Btn>
+      </div>
+
+      {error && <div className="bg-red-50 border border-red-200 text-red-700 rounded px-3 py-2 text-sm">{error}</div>}
+
+      {/* Présets courants */}
+      <div>
+        <p className="text-xs font-medium text-gray-500 mb-2">Génération rapide — corps de métier courants</p>
+        <div className="flex flex-wrap gap-2">
+          {COMMON_TRADES.map(t => {
+            const exists = catalogs.some(c => c.catalog_type === t.code)
+            return (
+              <button key={t.code} onClick={() => startGen(t)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                  exists
+                    ? 'bg-green-50 border-green-300 text-green-700 hover:bg-green-100'
+                    : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'
+                }`}>
+                {exists ? '✓ ' : '+ '}{t.name}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Liste des catalogues existants */}
+      {loading ? (
+        <div className="text-center py-8 text-gray-400">Chargement...</div>
+      ) : catalogs.length === 0 ? (
+        <div className="text-center py-12 text-gray-400">
+          <div className="text-4xl mb-3">🏗️</div>
+          <div className="font-medium">Aucun catalogue métier généré</div>
+          <div className="text-sm mt-1">Cliquez sur un métier ou "Nouveau catalogue" pour commencer</div>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {catalogs.map(cat => {
+            const preset = COMMON_TRADES.find(t => t.code === cat.catalog_type)
+            const isExpanded = expandedCatalog === cat.catalog_type
+            return (
+              <div key={cat.catalog_type} className="border border-gray-200 rounded-xl overflow-hidden">
+                <div className="flex items-center gap-3 px-4 py-3 bg-gray-50 hover:bg-gray-100 transition-colors">
+                  <div className="w-9 h-9 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center text-lg flex-shrink-0">
+                    🔧
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-semibold text-gray-800">
+                      {preset?.name || cat.catalog_type}
+                    </div>
+                    <div className="text-xs text-gray-500 flex gap-3 mt-0.5">
+                      <span>{cat.lot_count} lots</span>
+                      <span>·</span>
+                      <span className="font-mono text-gray-400">{cat.catalog_type}</span>
+                    </div>
+                  </div>
+                  <div className="flex gap-2 items-center">
+                    <Btn size="xs" variant="ghost" onClick={() => expandCatalog(cat.catalog_type)}>
+                      {isExpanded ? '▲ Réduire' : '▼ Voir'}
+                    </Btn>
+                    <Btn size="xs" variant="warning" onClick={() => startGen(preset || { code: cat.catalog_type, name: cat.catalog_type, desc: '' })}>
+                      ♻️ Régénérer
+                    </Btn>
+                    <Btn size="xs" variant="danger" onClick={() => deleteCatalog(cat.catalog_type)}>🗑</Btn>
+                  </div>
+                </div>
+
+                {isExpanded && (
+                  <div className="border-t border-gray-200 p-4">
+                    {expandLoading ? (
+                      <div className="text-center py-4 text-gray-400 text-sm">Chargement...</div>
+                    ) : expandData ? (
+                      <div className="space-y-4">
+                        {/* Lots + Tâches */}
+                        <div>
+                          <h4 className="text-xs font-semibold text-gray-600 uppercase mb-2">Lots & Tâches</h4>
+                          <div className="space-y-2">
+                            {expandData.lots.map(lot => {
+                              const lotTasks = expandData.tasks.filter(t => t.lot_code === lot.code)
+                              return (
+                                <div key={lot.id} className="border border-gray-100 rounded-lg overflow-hidden">
+                                  <div className="flex items-center gap-2 px-3 py-2 bg-gray-50">
+                                    <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: lot.color }} />
+                                    <span className="font-mono text-xs font-bold text-indigo-700">{lot.code}</span>
+                                    <span className="font-medium text-sm text-gray-800 flex-1">{lot.name}</span>
+                                    <span className="text-xs text-gray-500">{lot.duration_days}j</span>
+                                  </div>
+                                  {lotTasks.length > 0 && (
+                                    <div className="px-3 py-2 space-y-0.5">
+                                      {lotTasks.map(task => (
+                                        <div key={task.id} className="flex items-center gap-2 text-xs text-gray-600">
+                                          <span className="text-gray-300">└</span>
+                                          <span>{task.name}</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              )
+                            })}
+                          </div>
+                        </div>
+
+                        {/* Dépendances */}
+                        {expandData.deps.length > 0 && (
+                          <div>
+                            <h4 className="text-xs font-semibold text-gray-600 uppercase mb-2">Dépendances ({expandData.deps.length})</h4>
+                            <div className="flex flex-wrap gap-2">
+                              {expandData.deps.map(d => (
+                                <span key={d.id} className="inline-flex items-center gap-1 px-2 py-1 bg-blue-50 text-blue-700 rounded text-xs font-mono">
+                                  {d.pred_code} <span className="font-normal text-blue-400">→</span> {d.succ_code}
+                                  <span className="text-blue-400 font-normal">{d.dep_type}</span>
+                                  {d.lag_days > 0 && <span className="text-blue-300">+{d.lag_days}j</span>}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ) : null}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {/* Modal génération */}
+      {showGenModal && (
+        <Modal title="Générer un catalogue métier avec l'IA" onClose={() => { setShowGenModal(false); setGenResult(null); setError('') }}>
+          <div className="space-y-4">
+            {!genResult ? (
+              <>
+                <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-3 text-xs text-indigo-700">
+                  Claude va générer automatiquement les lots, tâches et dépendances pour ce corps de métier selon ses connaissances BTP.
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <Input label="Code (slug) *" value={genForm.trade_code}
+                    onChange={v => setGenForm(p => ({ ...p, trade_code: v.toLowerCase().replace(/\s+/g, '_') }))}
+                    placeholder="electricien" />
+                  <Input label="Nom du métier *" value={genForm.trade_name}
+                    onChange={v => setGenForm(p => ({ ...p, trade_name: v }))}
+                    placeholder="Électricien" />
+                </div>
+                <Input label="Description (optionnel)" value={genForm.description}
+                  onChange={v => setGenForm(p => ({ ...p, description: v }))}
+                  placeholder="Courant fort, faible courant, domotique..." />
+                {catalogs.some(c => c.catalog_type === genForm.trade_code) && (
+                  <label className="flex items-center gap-2 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded p-2">
+                    <input type="checkbox" checked={genForm.overwrite}
+                      onChange={e => setGenForm(p => ({ ...p, overwrite: e.target.checked }))}
+                      className="rounded" />
+                    Remplacer le catalogue existant
+                  </label>
+                )}
+                {error && <div className="text-red-600 text-sm">{error}</div>}
+                <div className="flex gap-2 pt-1">
+                  <Btn onClick={generate} disabled={generating || !genForm.trade_code || !genForm.trade_name}>
+                    {generating ? '⏳ Génération en cours...' : '🤖 Générer avec l\'IA'}
+                  </Btn>
+                  <Btn variant="ghost" onClick={() => setShowGenModal(false)}>Annuler</Btn>
+                </div>
+                {generating && (
+                  <p className="text-xs text-gray-500 text-center">Appel à Claude... ~10-20 secondes</p>
+                )}
+              </>
+            ) : (
+              <>
+                <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-sm text-green-700">
+                  ✅ Catalogue <strong>{genResult.trade_name}</strong> généré avec succès !
+                  <div className="mt-1 text-xs text-green-600">
+                    {genResult.lots?.length} lots · {genResult.deps?.length} dépendances · {genResult.tasks?.length} tâches
+                  </div>
+                </div>
+                <div className="max-h-64 overflow-y-auto space-y-1">
+                  {genResult.lots?.map((lot: any) => (
+                    <div key={lot.id} className="flex items-center gap-2 text-sm py-1 border-b border-gray-100">
+                      <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: lot.color }} />
+                      <span className="font-mono text-xs text-indigo-700 font-bold w-10">{lot.code}</span>
+                      <span className="text-gray-800">{lot.name}</span>
+                      <span className="ml-auto text-xs text-gray-400">{lot.duration_days}j</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  <Btn variant="ghost" onClick={() => { setShowGenModal(false); setGenResult(null) }}>Fermer</Btn>
+                  <Btn variant="warning" onClick={() => { setGenResult(null); setError('') }}>Régénérer</Btn>
+                </div>
+              </>
+            )}
+          </div>
+        </Modal>
+      )}
+    </div>
+  )
+}
+
+// ════════════════════════════════════════════════════════════
 // PAGE PRINCIPALE
 // ════════════════════════════════════════════════════════════
 
 const TABS = [
   { key: 'templates', label: '🤖 Modèles IA',     component: <TabTemplates /> },
+  { key: 'trades',    label: '🔧 Catalogues Métier', component: <TabTradeCatalogs /> },
   { key: 'menu',      label: '📌 Menu navigation', component: <TabMenu /> },
   { key: 'companies', label: '🏢 Entreprises',     component: <TabCompanies /> },
   { key: 'stats',     label: '📊 Statistiques',    component: <TabStats /> },

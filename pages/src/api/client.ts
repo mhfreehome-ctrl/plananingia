@@ -178,5 +178,12 @@ export const api = {
     inviteToCompany: (id: string, data: any) => post<any>(`/platform/companies/${id}/invite`, data),
     blockCompany: (id: string, blocked: boolean) => put<any>(`/platform/companies/${id}/block`, { blocked }),
     stats: () => get<any>('/platform/stats'),
+    // Trade catalogs (corps de métier)
+    tradeCatalogs: () => get<any[]>('/platform/trade-catalogs'),
+    generateTradeCatalog: (data: any) => post<any>('/platform/generate-trade-catalog', data),
+    deleteTradeCatalog: (tradeCode: string) => del(`/platform/trade-catalogs/${tradeCode}`),
+    lotTemplateTasks: (catalog: string) => get<any[]>(`/platform/lot-template-tasks?catalog=${catalog}`),
+    createLotTemplateTask: (data: any) => post<any>('/platform/lot-template-tasks', data),
+    deleteLotTemplateTask: (id: string) => del(`/platform/lot-template-tasks/${id}`),
   },
 }
