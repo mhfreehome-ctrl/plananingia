@@ -16,6 +16,8 @@ const STATUS_LIST = ['devis', 'programme', 'en_cours', 'livre', 'sav'] as const
 
 // Largeur colonne gauche (noms projets)
 const LEFT_COL = 260
+// Largeur colonne gauche élargie pour l'export PDF (noms complets)
+const EXPORT_LEFT_COL = 380
 // Hauteur par ligne projet
 const ROW_H = 36
 // Padding vertical dans la barre Gantt
@@ -120,18 +122,29 @@ export default function UnifiedPlanning() {
     try {
       const el        = ganttContainerRef.current
       const parentEl  = el.parentElement
-      const leftInner = leftColRef.current   // div scroll interne colonne gauche
-      const rightDiv  = scrollRef.current    // div scroll droite (zone Gantt)
+      const leftInner = leftColRef.current                         // div scroll interne colonne gauche
+      const leftOuter = el.firstElementChild as HTMLElement | null // div fixe gauche (width: LEFT_COL)
+      const rightDiv  = scrollRef.current                          // div scroll droite (zone Gantt)
 
       // Hauteurs réelles du contenu complet
       const rowsH  = filtered.length * ROW_H
-      const totalH = rowsH + 44 // 44 = hauteur header colonnes
-      const totalW = LEFT_COL + totalWidth
+      const totalH = rowsH + 44             // 44 = hauteur header colonnes
+      const totalW = EXPORT_LEFT_COL + totalWidth  // colonne gauche élargie pour noms complets
 
-      // Sauvegarder les styles
+      // Spans tronqués (classe "truncate") → on les libère pendant la capture
+      const truncateSpans = Array.from(leftInner.querySelectorAll('.truncate')) as HTMLElement[]
+      const savedSpanStyles = truncateSpans.map(s => ({
+        el: s,
+        overflow:    s.style.overflow,
+        textOverflow: s.style.textOverflow,
+        whiteSpace:  s.style.whiteSpace,
+      }))
+
+      // Sauvegarder les styles des conteneurs
       const saved: [HTMLElement, string, string][] = [
         [el,       'overflow', el.style.overflow],
         [el,       'height',   el.style.height],
+        [el,       'width',    el.style.width],
         [el,       'flex',     el.style.flex],
         [leftInner,'overflow', leftInner.style.overflow],
         [leftInner,'height',   leftInner.style.height],
@@ -139,6 +152,11 @@ export default function UnifiedPlanning() {
         [rightDiv, 'height',   rightDiv.style.height],
         [rightDiv, 'width',    rightDiv.style.width],
       ]
+      if (leftOuter) saved.push(
+        [leftOuter, 'width',    leftOuter.style.width],
+        [leftOuter, 'minWidth', leftOuter.style.minWidth],
+        [leftOuter, 'overflow', leftOuter.style.overflow],
+      )
       if (parentEl) saved.push(
         [parentEl, 'overflow', parentEl.style.overflow],
         [parentEl, 'height',   parentEl.style.height],
@@ -147,15 +165,28 @@ export default function UnifiedPlanning() {
       // Forcer les dimensions complètes
       el.style.overflow  = 'visible'
       el.style.height    = totalH + 'px'
+      el.style.width     = totalW + 'px'
       el.style.flex      = 'none'
       leftInner.style.overflow = 'visible'
       leftInner.style.height   = rowsH + 'px'
       rightDiv.style.overflow  = 'visible'
       rightDiv.style.height    = totalH + 'px'
       rightDiv.style.width     = totalWidth + 'px'
+      if (leftOuter) {
+        leftOuter.style.width    = EXPORT_LEFT_COL + 'px'
+        leftOuter.style.minWidth = EXPORT_LEFT_COL + 'px'
+        leftOuter.style.overflow = 'visible'
+      }
       if (parentEl) { parentEl.style.overflow = 'visible'; parentEl.style.height = 'auto' }
 
-      await new Promise(r => setTimeout(r, 80)) // laisser le DOM repaint
+      // Libérer les noms tronqués
+      for (const s of truncateSpans) {
+        s.style.overflow     = 'visible'
+        s.style.textOverflow = 'clip'
+        s.style.whiteSpace   = 'nowrap'
+      }
+
+      await new Promise(r => setTimeout(r, 100)) // laisser le DOM repaint
 
       const [{ default: html2canvas }, { default: jsPDF }] = await Promise.all([
         import('html2canvas'),
@@ -164,11 +195,18 @@ export default function UnifiedPlanning() {
       const canvas = await html2canvas(el, {
         scale: 2, useCORS: true, logging: false,
         width: totalW, height: totalH,
-        windowWidth: totalW + 100,
+        windowWidth: totalW + 200,
+        x: 0, y: 0,
       })
 
-      // Restaurer les styles
+      // Restaurer les styles conteneurs
       for (const [elem, prop, val] of saved) (elem.style as any)[prop] = val
+      // Restaurer les spans tronqués
+      for (const { el: s, overflow, textOverflow, whiteSpace } of savedSpanStyles) {
+        s.style.overflow     = overflow
+        s.style.textOverflow = textOverflow
+        s.style.whiteSpace   = whiteSpace
+      }
 
       const imgData = canvas.toDataURL('image/jpeg', 0.92)
       const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: format.toLowerCase() as 'a4' | 'a3' })
@@ -524,20 +562,28 @@ export default function UnifiedPlanning() {
               className="sticky top-0 z-10 flex border-b border-gray-200 bg-gray-50 relative"
               style={{ width: totalWidth, height: 40, minWidth: totalWidth }}
             >
-              {cols.map((col, i) => (
-                <div
-                  key={col}
-                  className="flex-shrink-0 border-r border-gray-200 flex items-center justify-center text-xs text-gray-500 font-medium"
-                  style={{ width: colWidth }}
-                >
-                  {zoom === 'month' ? monthLabel(col) : (
-                    <div className="flex flex-col items-center leading-none gap-0.5">
-                      <span className="font-bold text-primary-600">S{getISOWeek(new Date(col))}</span>
-                      <span>{weekLabel(new Date(col))}</span>
-                    </div>
-                  )}
-                </div>
-              ))}
+              {cols.map((col, i) => {
+                const d = new Date(col)
+                const prevD = i > 0 ? new Date(cols[i - 1]) : null
+                const isNewYear = !prevD || d.getUTCFullYear() !== prevD.getUTCFullYear()
+                return (
+                  <div
+                    key={col}
+                    className="flex-shrink-0 border-r border-gray-200 flex items-center justify-center text-xs text-gray-500 font-medium"
+                    style={{ width: colWidth }}
+                  >
+                    {zoom === 'month' ? monthLabel(col) : (
+                      <div className="flex flex-col items-center leading-none gap-0.5">
+                        <span className="font-bold text-primary-600">S{getISOWeek(d)}</span>
+                        <span>{weekLabel(d)}</span>
+                        {isNewYear && (
+                          <span className="text-[9px] font-bold text-orange-500">{d.getUTCFullYear()}</span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
               {/* Label "Aujourd'hui" positionné sur la ligne rouge */}
               {todayX > 0 && todayX < totalWidth && (
                 <div
