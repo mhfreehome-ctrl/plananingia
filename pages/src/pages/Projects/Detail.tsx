@@ -174,6 +174,8 @@ export default function ProjectDetail() {
   const [editProjectModal, setEditProjectModal] = useState(false)
   const [depModal, setDepModal] = useState(false)
   const [newDep, setNewDep] = useState({ predecessor_id: '', successor_id: '', type: 'FS', lag_days: 0 })
+  const [editDepModal, setEditDepModal] = useState<any | null>(null)  // dep en cours d'édition
+  const [editDep, setEditDep] = useState({ predecessor_id: '', successor_id: '', type: 'FS', lag_days: 0 })
   const [chantierType, setChantierType] = useState<string>('')
   const [milestones, setMilestones] = useState<any[]>([])
   const [milestoneModal, setMilestoneModal] = useState<any>(null) // {milestone?, mode: 'add'|'edit'}
@@ -316,6 +318,17 @@ export default function ProjectDetail() {
 
   const handleDeleteDep = async (depId: string) => {
     await api.deps.delete(depId); await loadData()
+  }
+
+  const handleUpdateDep = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!editDepModal) return
+    try {
+      await api.deps.delete(editDepModal.id)
+      await api.deps.create(id!, { predecessor_id: editDep.predecessor_id, successor_id: editDep.successor_id, type: editDep.type, lag_days: editDep.lag_days })
+      setEditDepModal(null)
+      await loadData()
+    } catch (e: any) { setMsg(e.message) }
   }
 
   // Handlers pour la création/suppression/modification visuelle des liens sur le Gantt
@@ -727,13 +740,19 @@ export default function ProjectDetail() {
                 {deps.map(d => {
                   const pred = lots.find(l => l.id === d.predecessor_id)
                   const succ = lots.find(l => l.id === d.successor_id)
+                  const depColors: Record<string, string> = { FS: 'badge-blue', FF: 'badge-orange', SS: 'badge-green', SF: 'badge-purple' }
                   return (
                     <tr key={d.id}>
                       <td>{pred ? `${pred.code} — ${pred.name}` : '?'}</td>
-                      <td><span className={`badge ${d.type === 'SS' ? 'badge-green' : 'badge-blue'}`}>{d.type}</span></td>
+                      <td><span className={`badge ${depColors[d.type] ?? 'badge-blue'}`}>{d.type}</span></td>
                       <td>{succ ? `${succ.code} — ${succ.name}` : '?'}</td>
                       <td>{d.lag_days}j</td>
-                      <td><button onClick={() => handleDeleteDep(d.id)} className="btn btn-ghost btn-sm text-xs text-red-500">✕</button></td>
+                      <td className="flex gap-1">
+                        <button
+                          onClick={() => { setEditDepModal(d); setEditDep({ predecessor_id: d.predecessor_id, successor_id: d.successor_id, type: d.type, lag_days: d.lag_days }) }}
+                          className="btn btn-ghost btn-sm text-xs text-indigo-500" title="Modifier">✏️</button>
+                        <button onClick={() => handleDeleteDep(d.id)} className="btn btn-ghost btn-sm text-xs text-red-500" title="Supprimer">✕</button>
+                      </td>
                     </tr>
                   )
                 })}
@@ -814,6 +833,46 @@ export default function ProjectDetail() {
           onSubmit={handleSaveMilestone}
           onDelete={milestoneModal.mode === 'edit' ? handleDeleteMilestone : undefined}
         />
+      )}
+
+      {editDepModal && (
+        <div className="modal-overlay">
+          <div className="modal max-w-md">
+            <div className="modal-header"><h3 className="font-semibold">{t('deps.title')} — Modifier</h3><button onClick={() => setEditDepModal(null)}>✕</button></div>
+            <form onSubmit={handleUpdateDep}>
+              <div className="modal-body space-y-4">
+                <div className="field">
+                  <label className="label">{t('deps.predecessor')}</label>
+                  <select className="select" value={editDep.predecessor_id} onChange={e => setEditDep(d => ({ ...d, predecessor_id: e.target.value }))} required>
+                    <option value="">{t('common.none')}</option>
+                    {lots.map(l => <option key={l.id} value={l.id}>{l.code} — {l.name}</option>)}
+                  </select>
+                </div>
+                <div className="field">
+                  <label className="label">{t('deps.type')}</label>
+                  <select className="select" value={editDep.type} onChange={e => setEditDep(d => ({ ...d, type: e.target.value }))}>
+                    {['FS','SS','FF','SF'].map(ty => <option key={ty} value={ty}>{t(`deps.type.${ty}` as any)}</option>)}
+                  </select>
+                </div>
+                <div className="field">
+                  <label className="label">{t('deps.successor')}</label>
+                  <select className="select" value={editDep.successor_id} onChange={e => setEditDep(d => ({ ...d, successor_id: e.target.value }))} required>
+                    <option value="">{t('common.none')}</option>
+                    {lots.map(l => <option key={l.id} value={l.id}>{l.code} — {l.name}</option>)}
+                  </select>
+                </div>
+                <div className="field">
+                  <label className="label">{t('deps.lag')} (optionnel)</label>
+                  <input type="number" className="input" min={0} value={editDep.lag_days} onChange={e => setEditDep(d => ({ ...d, lag_days: Number(e.target.value) }))} />
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button type="button" onClick={() => setEditDepModal(null)} className="btn btn-ghost">{t('common.cancel')}</button>
+                <button type="submit" className="btn btn-primary">{t('common.save')}</button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
 
       {depModal && (
