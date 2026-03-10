@@ -73,12 +73,14 @@ interface DragState {
 
 interface LinkDragState {
   sourceLotId: string
-  handle: 'end' | 'start'   // 'end' = bord droit (→ FS), 'start' = bord gauche (→ SS)
+  handle: 'end' | 'start'   // 'end' = bord droit (→ FS/FF), 'start' = bord gauche (→ SS/SF)
   startX: number             // Coordonnées SVG chart (scroll inclus)
   startY: number
   cursorX: number
   cursorY: number
   targetLotId?: string       // Lot survolé = cible potentielle
+  targetSide?: 'start' | 'end'  // Moitié gauche (start) ou droite (end) de la cible
+  depType?: string              // Type déduit : 'FS'|'FF'|'SS'|'SF'
 }
 
 type Zoom = 'day' | 'week' | 'month'
@@ -104,6 +106,34 @@ function fmtShort(d: Date): string {
 function daysBetween(start: Date, isoDate: string): number {
   const target = new Date(isoDate)
   return Math.round((target.getTime() - start.getTime()) / (1000 * 60 * 60 * 24))
+}
+
+// Auto-deduce dep type from source handle × target half
+function getDepType(sourceHandle: 'start' | 'end', targetSide: 'start' | 'end'): string {
+  if (sourceHandle === 'end'   && targetSide === 'start') return 'FS'
+  if (sourceHandle === 'end'   && targetSide === 'end')   return 'FF'
+  if (sourceHandle === 'start' && targetSide === 'start') return 'SS'
+  return 'SF'  // start → end
+}
+
+// Build a Bezier SVG path for a dependency arrow based on type
+function depPath(from: { x: number; y: number; w: number }, to: { x: number; y: number; w: number }, type: string): string {
+  // Anchor points per type : FS right→left, FF right→right, SS left→left, SF left→right
+  const x1 = (type === 'SS' || type === 'SF') ? from.x : from.x + from.w
+  const x2 = (type === 'FF' || type === 'SF') ? to.x + to.w : to.x
+  const y1 = from.y, y2 = to.y
+  const dx = Math.abs(x2 - x1)
+  if (type === 'FF') {
+    const ox = Math.max(30, dx * 0.4)
+    return `M${x1},${y1} C${x1 + ox},${y1} ${x2 + ox},${y2} ${x2},${y2}`
+  }
+  if (type === 'SS') {
+    const ox = Math.max(30, dx * 0.4)
+    return `M${x1},${y1} C${x1 - ox},${y1} ${x2 - ox},${y2} ${x2},${y2}`
+  }
+  // FS and SF : standard S-curve
+  const mid = (x1 + x2) / 2
+  return `M${x1},${y1} C${mid},${y1} ${mid},${y2} ${x2},${y2}`
 }
 
 // Detect if creating a dep (predId → succId) would create a cycle in existing deps
@@ -170,6 +200,7 @@ export default function GanttChart({ lots, deps, projectStartDate, lang = 'fr', 
   const [editingDep, setEditingDep] = useState<{ dep: Dep; x: number; y: number } | null>(null)
   const [editDepType, setEditDepType] = useState('FS')
   const [editDepLag, setEditDepLag] = useState(0)
+  const [linkMode, setLinkMode] = useState(false)  // Mode édition des liaisons
   const linkDragRef = useRef<LinkDragState | null>(null)
   const lotMapRef = useRef<Record<string, { x: number; y: number; w: number }>>({})
   const hoverClearTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -257,7 +288,7 @@ export default function GanttChart({ lots, deps, projectStartDate, lang = 'fr', 
     return Math.max((dur / 30) * colW, 20)
   }
 
-  const canDrag = !!(projectId && onRefresh) && !readOnly
+  const canDrag = !!(projectId && onRefresh) && !readOnly && !linkMode
 
   // Build position map for dep arrows (follows dragged bar live)
   const lotMap: Record<string, { x: number; y: number; w: number }> = {}
@@ -431,6 +462,13 @@ export default function GanttChart({ lots, deps, projectStartDate, lang = 'fr', 
     return () => document.removeEventListener('click', close)
   }, [contextMenu])
 
+  // ── Escape : quitte le mode Liaisons ──
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setLinkMode(false) }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
   // ── Dessin d'un lien par drag depuis un handle ──
   function startLinkDrag(
     e: React.MouseEvent<SVGCircleElement>,
@@ -460,7 +498,16 @@ export default function GanttChart({ lots, deps, projectStartDate, lang = 'fr', 
           cursorChartY >= pos.y - ROW_H / 2 + 6 && cursorChartY <= pos.y + ROW_H / 2 - 6
         ) { targetId = id; break }
       }
-      const next = { ...linkDragRef.current!, cursorX: cursorChartX, cursorY: cursorChartY, targetLotId: targetId }
+      // Calcul du côté cible (moitié gauche = start, moitié droite = end)
+      let targetSide: 'start' | 'end' | undefined
+      if (targetId) {
+        const m = lotMapRef.current[targetId]
+        targetSide = cursorChartX < m.x + m.w / 2 ? 'start' : 'end'
+      }
+      const depType = targetId && targetSide
+        ? getDepType(linkDragRef.current!.handle, targetSide)
+        : undefined
+      const next = { ...linkDragRef.current!, cursorX: cursorChartX, cursorY: cursorChartY, targetLotId: targetId, targetSide, depType }
       linkDragRef.current = next
       setLinkDrag({ ...next })
     }
@@ -491,13 +538,24 @@ export default function GanttChart({ lots, deps, projectStartDate, lang = 'fr', 
       // Fallback : dernière cible connue (cas où le mouseup est hors barre mais targetLotId valide)
       if (!targetId) targetId = ld.targetLotId
       if (!targetId) return
-      const predId = ld.handle === 'end' ? ld.sourceLotId : targetId
-      const succId = ld.handle === 'end' ? targetId : ld.sourceLotId
+      // Calcul du côté cible au mouseup (recalculé à partir de la position réelle)
+      let finalTargetSide: 'start' | 'end' | undefined
+      if (targetId && area) {
+        const rect = area.getBoundingClientRect()
+        const upChartX = ev.clientX - rect.left + area.scrollLeft
+        const m = lotMapRef.current[targetId]
+        if (m) finalTargetSide = upChartX < m.x + m.w / 2 ? 'start' : 'end'
+      }
+      // Fallback : côté connu pendant le drag
+      if (!finalTargetSide) finalTargetSide = ld.targetSide ?? 'start'
+      const type = getDepType(ld.handle, finalTargetSide)
+      const predId = ld.sourceLotId
+      const succId = targetId
       // Anti-doublon
       if (depsRef.current.find(d => d.predecessor_id === predId && d.successor_id === succId)) return
       // Anti-cycle
       if (wouldCreateCycle(predId, succId, depsRef.current)) return
-      await onDependencyCreate(predId, succId, 'FS', 0)
+      await onDependencyCreate(predId, succId, type, 0)
     }
 
     window.addEventListener('mousemove', onMove)
@@ -529,6 +587,21 @@ export default function GanttChart({ lots, deps, projectStartDate, lang = 'fr', 
             <span className="text-[10px] opacity-70">{showSubTasks ? '▲' : '▼'}</span>
           </button>
         </div>
+        {!readOnly && onDependencyCreate && (
+          <div className="flex items-center border-l border-gray-200 pl-2 ml-1">
+            <button
+              onClick={() => setLinkMode(lm => !lm)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium border transition-colors ${
+                linkMode
+                  ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                  : 'bg-white text-gray-600 border-gray-300 hover:border-indigo-400 hover:text-indigo-600'
+              }`}
+              title="Mode édition des liaisons (Échap pour quitter)"
+            >
+              🔗 Liaisons
+            </button>
+          </div>
+        )}
         {!readOnly && (
           <div className="flex items-center gap-1 border-l border-gray-200 pl-2 ml-1">
             <span className="text-xs text-gray-400 mr-1">PDF :</span>
@@ -567,6 +640,14 @@ export default function GanttChart({ lots, deps, projectStartDate, lang = 'fr', 
             <span className="flex items-center gap-1">
               <svg width="22" height="12"><path d="M2,6 C8,6 14,6 20,6" fill="none" stroke="#10b981" strokeWidth="1.5" strokeDasharray="4 2" markerEnd="url(#a3)" /><defs><marker id="a3" markerWidth="4" markerHeight="4" refX="2" refY="2" orient="auto"><path d="M0,0 L0,4 L4,2 z" fill="#10b981" /></marker></defs></svg>
               <span className="hidden sm:inline">SS</span>
+            </span>
+            <span className="flex items-center gap-1">
+              <svg width="22" height="12"><path d="M2,6 C8,6 14,6 20,6" fill="none" stroke="#f97316" strokeWidth="1.5" markerEnd="url(#a4)" /><defs><marker id="a4" markerWidth="4" markerHeight="4" refX="2" refY="2" orient="auto"><path d="M0,0 L0,4 L4,2 z" fill="#f97316" /></marker></defs></svg>
+              <span className="hidden sm:inline">FF</span>
+            </span>
+            <span className="flex items-center gap-1">
+              <svg width="22" height="12"><path d="M2,6 C8,6 14,6 20,6" fill="none" stroke="#8b5cf6" strokeWidth="1.5" strokeDasharray="4 2" markerEnd="url(#a5)" /><defs><marker id="a5" markerWidth="4" markerHeight="4" refX="2" refY="2" orient="auto"><path d="M0,0 L0,4 L4,2 z" fill="#8b5cf6" /></marker></defs></svg>
+              <span className="hidden sm:inline">SF</span>
             </span>
             <span className="flex items-center gap-1">
               <svg width="20" height="12"><line x1="10" y1="0" x2="10" y2="12" stroke="#f97316" strokeWidth="1.5" strokeDasharray="3 2" /><polygon points="10,6 6,12 14,12" fill="#f97316" /></svg>
@@ -681,17 +762,17 @@ export default function GanttChart({ lots, deps, projectStartDate, lang = 'fr', 
                   const from = lotMap[d.predecessor_id]
                   const to = lotMap[d.successor_id]
                   if (!from || !to) return null
-                  const x1 = from.x + from.w, y1 = from.y
-                  const x2 = to.x, y2 = to.y
-                  const mid = (x1 + x2) / 2
+                  const DEP_COLORS: Record<string, string> = { FS: '#94a3b8', FF: '#f97316', SS: '#10b981', SF: '#8b5cf6' }
+                  const color = d.id === hoveredDepId ? '#6366f1' : (DEP_COLORS[d.type] ?? '#94a3b8')
+                  const markerId = d.id === hoveredDepId ? 'arrow-hov' : `arrow-${d.type ?? 'FS'}`
                   return (
                     <g key={d.id}>
-                      <path d={`M${x1},${y1} C${mid},${y1} ${mid},${y2} ${x2},${y2}`}
+                      <path d={depPath(from, to, d.type)}
                         fill="none"
-                        stroke={d.id === hoveredDepId ? '#6366f1' : (d.type === 'SS' ? '#10b981' : '#94a3b8')}
+                        stroke={color}
                         strokeWidth={d.id === hoveredDepId ? "2.5" : "1.5"}
-                        strokeDasharray={d.type === 'SS' ? '4 2' : undefined}
-                        markerEnd="url(#arrow)"
+                        strokeDasharray={d.type === 'SS' || d.type === 'SF' ? '4 2' : undefined}
+                        markerEnd={`url(#${markerId})`}
                         opacity={d.id === hoveredDepId ? "1" : "0.7"} />
                     </g>
                   )
@@ -781,8 +862,20 @@ export default function GanttChart({ lots, deps, projectStartDate, lang = 'fr', 
                   )
                 })}
                 <defs>
-                  <marker id="arrow" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto">
+                  <marker id="arrow-FS" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto">
                     <path d="M0,0 L0,6 L6,3 z" fill="#94a3b8" />
+                  </marker>
+                  <marker id="arrow-FF" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto">
+                    <path d="M0,0 L0,6 L6,3 z" fill="#f97316" />
+                  </marker>
+                  <marker id="arrow-SS" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto">
+                    <path d="M0,0 L0,6 L6,3 z" fill="#10b981" />
+                  </marker>
+                  <marker id="arrow-SF" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto">
+                    <path d="M0,0 L0,6 L6,3 z" fill="#8b5cf6" />
+                  </marker>
+                  <marker id="arrow-hov" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto">
+                    <path d="M0,0 L0,6 L6,3 z" fill="#6366f1" />
                   </marker>
                 </defs>
               </svg>
@@ -845,8 +938,8 @@ export default function GanttChart({ lots, deps, projectStartDate, lang = 'fr', 
                 return (
                   <div key={l.id}
                     style={{ position: 'absolute', top: y, left: 0, width: '100%', height: rh }}
-                    onMouseEnter={!drag && !linkDrag ? (e) => { if (hoverClearTimer.current) { clearTimeout(hoverClearTimer.current); hoverClearTimer.current = null } setTooltip({ lot: l, x: e.clientX, y: e.clientY }); setHoveredLotId(l.id) } : undefined}
-                    onMouseLeave={!drag && !linkDrag ? () => { setTooltip(null); hoverClearTimer.current = setTimeout(() => { setHoveredLotId(null) }, 80) } : undefined}>
+                    onMouseEnter={(!drag || linkMode) && !linkDrag ? (e) => { if (hoverClearTimer.current) { clearTimeout(hoverClearTimer.current); hoverClearTimer.current = null }; if (!linkMode) setTooltip({ lot: l, x: e.clientX, y: e.clientY }); setHoveredLotId(l.id) } : undefined}
+                    onMouseLeave={(!drag || linkMode) && !linkDrag ? () => { setTooltip(null); hoverClearTimer.current = setTimeout(() => { setHoveredLotId(null) }, 80) } : undefined}>
                     {/* ── Couche 1 : fond pastel ── */}
                     <div style={{
                       position: 'absolute', left: x, top: l.parent_lot_id ? 10 : 8,
@@ -949,10 +1042,9 @@ export default function GanttChart({ lots, deps, projectStartDate, lang = 'fr', 
                   {deps.map(d => {
                     const from = lotMap[d.predecessor_id], to = lotMap[d.successor_id]
                     if (!from || !to) return null
-                    const x1 = from.x + from.w, y1 = from.y, x2 = to.x, y2 = to.y, mid = (x1 + x2) / 2
                     return (
                       <path key={`hit-${d.id}`}
-                        d={`M${x1},${y1} C${mid},${y1} ${mid},${y2} ${x2},${y2}`}
+                        d={depPath(from, to, d.type)}
                         fill="none" stroke="black" strokeWidth="12"
                         style={{ cursor: 'pointer', pointerEvents: 'stroke', opacity: 0 }}
                         onMouseEnter={() => setHoveredDepId(d.id)}
@@ -963,55 +1055,87 @@ export default function GanttChart({ lots, deps, projectStartDate, lang = 'fr', 
                     )
                   })}
 
-                  {/* Handles ○ au hover sur une barre de lot */}
-                  {/* pointerEvents:'all' sur chaque cercle surcharge le 'none' de la SVG parente */}
-                  {!drag && !linkDrag && hoveredLotId && lotMap[hoveredLotId] && (() => {
+                  {/* Petits dots indigo sur toutes les barres en mode Liaisons */}
+                  {linkMode && !linkDrag && Object.entries(lotMap).map(([lid, m]) => (
+                    <g key={`dots-${lid}`} style={{ pointerEvents: 'none' }}>
+                      <circle cx={m.x} cy={m.y} r={4} fill="#6366f1" opacity="0.30" />
+                      <circle cx={m.x + m.w} cy={m.y} r={4} fill="#6366f1" opacity="0.30" />
+                    </g>
+                  ))}
+
+                  {/* Grands handles ○ au hover sur une barre en mode Liaisons */}
+                  {linkMode && !linkDrag && hoveredLotId && lotMap[hoveredLotId] && (() => {
                     const m = lotMap[hoveredLotId]
                     const capturedId = hoveredLotId
                     return (
                       <g>
-                        {/* Bord gauche → SS */}
-                        <circle cx={m.x} cy={m.y} r={7} fill="white" stroke="#6366f1" strokeWidth="2"
+                        {/* Bord gauche → SS/SF */}
+                        <circle cx={m.x} cy={m.y} r={8} fill="white" stroke="#6366f1" strokeWidth="2.5"
                           style={{ cursor: 'crosshair', pointerEvents: 'all' }}
                           onMouseEnter={() => { if (hoverClearTimer.current) { clearTimeout(hoverClearTimer.current); hoverClearTimer.current = null } }}
                           onMouseLeave={() => { setHoveredLotId(null) }}
-                          onMouseDown={(e) => startLinkDrag(e, capturedId, 'start', m.x, m.y)} />
-                        <title>Créer un lien SS (Début-Début)</title>
-                        {/* Bord droit → FS */}
-                        <circle cx={m.x + m.w} cy={m.y} r={7} fill="white" stroke="#6366f1" strokeWidth="2"
+                          onMouseDown={(e) => startLinkDrag(e, capturedId, 'start', m.x, m.y)}>
+                          <title>Départ depuis le début (SS ou SF)</title>
+                        </circle>
+                        <text x={m.x} y={m.y + 4} textAnchor="middle" fontSize="8" fill="#6366f1" style={{ pointerEvents: 'none', userSelect: 'none' }}>SS</text>
+                        {/* Bord droit → FS/FF */}
+                        <circle cx={m.x + m.w} cy={m.y} r={8} fill="white" stroke="#6366f1" strokeWidth="2.5"
                           style={{ cursor: 'crosshair', pointerEvents: 'all' }}
                           onMouseEnter={() => { if (hoverClearTimer.current) { clearTimeout(hoverClearTimer.current); hoverClearTimer.current = null } }}
                           onMouseLeave={() => { setHoveredLotId(null) }}
-                          onMouseDown={(e) => startLinkDrag(e, capturedId, 'end', m.x + m.w, m.y)} />
+                          onMouseDown={(e) => startLinkDrag(e, capturedId, 'end', m.x + m.w, m.y)}>
+                          <title>Départ depuis la fin (FS ou FF)</title>
+                        </circle>
+                        <text x={m.x + m.w} y={m.y + 4} textAnchor="middle" fontSize="8" fill="#6366f1" style={{ pointerEvents: 'none', userSelect: 'none' }}>FS</text>
                       </g>
                     )
                   })()}
 
                   {/* Ligne de dessin en cours */}
-                  {linkDrag && (
-                    <g>
-                      <line
-                        x1={linkDrag.startX} y1={linkDrag.startY}
-                        x2={linkDrag.cursorX} y2={linkDrag.cursorY}
-                        stroke="#6366f1" strokeWidth="2" strokeDasharray="6 3"
-                        style={{ pointerEvents: 'none' }}
-                        markerEnd="url(#arrow-link)" />
-                      {/* Surbrillance de la cible potentielle */}
-                      {linkDrag.targetLotId && lotMap[linkDrag.targetLotId] && (() => {
-                        const m = lotMap[linkDrag.targetLotId!]
-                        return (
-                          <rect x={m.x - 2} y={m.y - 16} width={m.w + 4} height={28}
-                            fill="none" stroke="#6366f1" strokeWidth="2" rx="6" opacity="0.75"
-                            style={{ pointerEvents: 'none' }} />
-                        )
-                      })()}
-                      <defs>
-                        <marker id="arrow-link" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto">
-                          <path d="M0,0 L0,6 L6,3 z" fill="#6366f1" />
-                        </marker>
-                      </defs>
-                    </g>
-                  )}
+                  {linkDrag && (() => {
+                    const DEP_COLORS: Record<string, string> = { FS: '#94a3b8', FF: '#f97316', SS: '#10b981', SF: '#8b5cf6' }
+                    const color = linkDrag.depType ? (DEP_COLORS[linkDrag.depType] ?? '#6366f1') : '#6366f1'
+                    const mx = (linkDrag.startX + linkDrag.cursorX) / 2
+                    const my = (linkDrag.startY + linkDrag.cursorY) / 2
+                    return (
+                      <g>
+                        <line
+                          x1={linkDrag.startX} y1={linkDrag.startY}
+                          x2={linkDrag.cursorX} y2={linkDrag.cursorY}
+                          stroke={color} strokeWidth="2" strokeDasharray="6 3"
+                          style={{ pointerEvents: 'none' }}
+                          markerEnd="url(#arrow-link-dyn)" />
+                        {/* Badge type au centre de la ligne */}
+                        {linkDrag.depType && (
+                          <g style={{ pointerEvents: 'none' }}>
+                            <rect x={mx - 14} y={my - 10} width={28} height={20} rx={4} fill={color} opacity="0.9" />
+                            <text x={mx} y={my + 4} textAnchor="middle" fill="white" fontSize="11" fontWeight="bold" style={{ userSelect: 'none' }}>
+                              {linkDrag.depType}
+                            </text>
+                          </g>
+                        )}
+                        {/* Surbrillance de la moitié cible (gauche ou droite) */}
+                        {linkDrag.targetLotId && lotMap[linkDrag.targetLotId] && (() => {
+                          const m = lotMap[linkDrag.targetLotId!]
+                          const hw = m.w / 2
+                          const hx = linkDrag.targetSide === 'end' ? m.x + hw : m.x
+                          return (
+                            <g style={{ pointerEvents: 'none' }}>
+                              <rect x={hx - 2} y={m.y - 16} width={hw + 4} height={28}
+                                fill={color} opacity="0.18" rx="4" />
+                              <rect x={hx - 2} y={m.y - 16} width={hw + 4} height={28}
+                                fill="none" stroke={color} strokeWidth="1.5" rx="4" opacity="0.6" />
+                            </g>
+                          )
+                        })()}
+                        <defs>
+                          <marker id="arrow-link-dyn" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto">
+                            <path d="M0,0 L0,6 L6,3 z" fill={color} />
+                          </marker>
+                        </defs>
+                      </g>
+                    )
+                  })()}
                 </svg>
               )}
             </div>
@@ -1087,10 +1211,16 @@ export default function GanttChart({ lots, deps, projectStartDate, lang = 'fr', 
             </div>
             {/* Sélecteur de type */}
             <div className="flex gap-1 mb-3">
-              {['FS', 'SS', 'FF'].map(ty => (
+              {[
+                { ty: 'FS', color: '#94a3b8' },
+                { ty: 'SS', color: '#10b981' },
+                { ty: 'FF', color: '#f97316' },
+                { ty: 'SF', color: '#8b5cf6' },
+              ].map(({ ty, color }) => (
                 <button key={ty}
                   onClick={() => setEditDepType(ty)}
-                  className={`flex-1 py-1.5 rounded text-xs font-bold transition-colors ${editDepType === ty ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                  style={editDepType === ty ? { backgroundColor: color, color: 'white', borderColor: color } : {}}
+                  className={`flex-1 py-1.5 rounded text-xs font-bold transition-colors border ${editDepType === ty ? '' : 'bg-gray-100 text-gray-600 hover:bg-gray-200 border-transparent'}`}
                 >
                   {ty}
                 </button>
