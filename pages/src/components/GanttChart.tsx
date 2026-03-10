@@ -1293,7 +1293,7 @@ export default function GanttChart({ lots, deps, projectStartDate, lang = 'fr', 
               {pred?.code ?? '?'} <span className="text-gray-400">→</span> {succ?.code ?? '?'}
             </div>
             {/* Sélecteur de type */}
-            <div className="flex gap-1 mb-3">
+            <div className="flex gap-1 mb-2">
               {[
                 { ty: 'FS', color: '#94a3b8' },
                 { ty: 'SS', color: '#10b981' },
@@ -1309,6 +1309,24 @@ export default function GanttChart({ lots, deps, projectStartDate, lang = 'fr', 
                 </button>
               ))}
             </div>
+            {/* Explication du type sélectionné */}
+            {(() => {
+              const DEP_HELP: Record<string, { label: string; icon: string; desc: string }> = {
+                FS: { label: 'Fin → Début', icon: '▶|', desc: 'B commence après la fin de A' },
+                SS: { label: 'Début → Début', icon: '|▶▶', desc: 'B démarre en même temps que A' },
+                FF: { label: 'Fin → Fin', icon: '▶▶|', desc: 'B finit en même temps que A' },
+                SF: { label: 'Début → Fin', icon: '|▶|', desc: 'B finit quand A commence' },
+              }
+              const h = DEP_HELP[editDepType]
+              const colors: Record<string,string> = { FS:'#94a3b8', SS:'#10b981', FF:'#f97316', SF:'#8b5cf6' }
+              const c = colors[editDepType] ?? '#94a3b8'
+              return h ? (
+                <div className="mb-3 rounded-lg px-2.5 py-2 text-xs border" style={{ backgroundColor: c + '18', borderColor: c + '44' }}>
+                  <div className="font-semibold" style={{ color: c }}>{editDepType} — {h.label}</div>
+                  <div className="mt-0.5 text-gray-600">{h.desc}</div>
+                </div>
+              ) : null
+            })()}
             {/* Décalage */}
             <div className="flex items-center gap-2 mb-4">
               <span className="text-xs text-gray-600 whitespace-nowrap">Décalage</span>

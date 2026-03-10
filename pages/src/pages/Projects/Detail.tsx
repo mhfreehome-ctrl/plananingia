@@ -851,8 +851,21 @@ export default function ProjectDetail() {
                 <div className="field">
                   <label className="label">{t('deps.type')}</label>
                   <select className="select" value={editDep.type} onChange={e => setEditDep(d => ({ ...d, type: e.target.value }))}>
-                    {['FS','SS','FF','SF'].map(ty => <option key={ty} value={ty}>{t(`deps.type.${ty}` as any)}</option>)}
+                    <option value="FS">FS — Fin → Début</option>
+                    <option value="SS">SS — Début → Début</option>
+                    <option value="FF">FF — Fin → Fin</option>
+                    <option value="SF">SF — Début → Fin</option>
                   </select>
+                  {(() => {
+                    const info: Record<string, [string, string]> = {
+                      FS: ["B démarre après la fin de A — le plus courant", "bg-slate-50 border-slate-200 text-slate-700"],
+                      SS: ["B démarre en même temps que A", "bg-emerald-50 border-emerald-200 text-emerald-700"],
+                      FF: ["B finit en même temps que A", "bg-orange-50 border-orange-200 text-orange-700"],
+                      SF: ["B finit quand A commence — cas rare", "bg-violet-50 border-violet-200 text-violet-700"],
+                    }
+                    const [desc, cls] = info[editDep.type] ?? []
+                    return desc ? <div className={`mt-2 rounded-lg px-3 py-2 text-xs border ${cls}`}>💡 {desc}</div> : null
+                  })()}
                 </div>
                 <div className="field">
                   <label className="label">{t('deps.successor')}</label>
@@ -891,8 +904,21 @@ export default function ProjectDetail() {
                 <div className="field">
                   <label className="label">{t('deps.type')}</label>
                   <select className="select" value={newDep.type} onChange={e => setNewDep(d => ({ ...d, type: e.target.value }))}>
-                    {['FS','SS','FF','SF'].map(ty => <option key={ty} value={ty}>{t(`deps.type.${ty}` as any)}</option>)}
+                    <option value="FS">FS — Fin → Début</option>
+                    <option value="SS">SS — Début → Début</option>
+                    <option value="FF">FF — Fin → Fin</option>
+                    <option value="SF">SF — Début → Fin</option>
                   </select>
+                  {(() => {
+                    const info: Record<string, [string, string]> = {
+                      FS: ["B démarre après la fin de A — le plus courant", "bg-slate-50 border-slate-200 text-slate-700"],
+                      SS: ["B démarre en même temps que A", "bg-emerald-50 border-emerald-200 text-emerald-700"],
+                      FF: ["B finit en même temps que A", "bg-orange-50 border-orange-200 text-orange-700"],
+                      SF: ["B finit quand A commence — cas rare", "bg-violet-50 border-violet-200 text-violet-700"],
+                    }
+                    const [desc, cls] = info[newDep.type] ?? []
+                    return desc ? <div className={`mt-2 rounded-lg px-3 py-2 text-xs border ${cls}`}>💡 {desc}</div> : null
+                  })()}
                 </div>
                 <div className="field">
                   <label className="label">{t('deps.successor')}</label>
