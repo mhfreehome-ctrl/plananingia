@@ -14,3 +14,21 @@ database_id = "f89b9344-ab63-42c7-b73c-3624de36ce07"
 [[kv_namespaces]]
 binding = "KV"
 id = "4665fa794ded4f719560dd9f03bc2e2f"
+
+# ─── Environnement Staging (branche develop) ───────────────────────────────
+# Worker séparé → planningai-api-staging.mhfreehome.workers.dev
+# D1 partagé avec prod (même dataset), KV isolé (rate limits indépendants)
+[env.staging]
+name = "planningai-api-staging"
+
+[env.staging.vars]
+ENVIRONMENT = "staging"
+
+[[env.staging.d1_databases]]
+binding = "DB"
+database_name = "planningAI-v2"
+database_id = "f89b9344-ab63-42c7-b73c-3624de36ce07"
+
+[[env.staging.kv_namespaces]]
+binding = "KV"
+id = "cad59b655803480e9ae495bab26a40c8"

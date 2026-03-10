@@ -18,17 +18,31 @@ echo ""
 echo "═══════════════════════════════════════════════════════"
 echo "   DÉPLOIEMENT STAGING — PlanningAI (develop)"
 echo "═══════════════════════════════════════════════════════"
-echo "   → Cloudflare Pages preview (branche develop)"
-echo "   → PAS de déploiement en production"
+echo "   Worker  → planningai-api-staging.mhfreehome.workers.dev"
+echo "   Pages   → develop.planningia.pages.dev"
+echo "   PAS de déploiement en production"
 echo "═══════════════════════════════════════════════════════"
 echo ""
 
+# ── Déploiement Worker Staging ────────────────────────────────────────────────
+
+echo "🚀 Déploiement Worker staging..."
+cd "$PLAN/worker" && npm run deploy:staging
+
+# ── Build Pages (mode staging → VITE_API_BASE = staging worker) ───────────────
+
+echo ""
+echo "🚀 Build + Déploiement Pages staging..."
+cd "$PLAN/pages" && npm run build:staging && npx wrangler pages deploy dist --project-name planningia --branch develop
+
 # ── Commit + push develop ─────────────────────────────────────────────────────
 
+echo ""
+echo "📦 Push develop..."
+cd "$PLAN"
 git add -A
 git commit -m "dev: $(date '+%Y-%m-%d %H:%M')" 2>/dev/null || echo "Rien à commiter"
 git push origin develop
 
 echo ""
-echo "📦 Push develop → Cloudflare Pages preview auto-déployé"
-echo "✅ Staging OK — vérifier l'URL preview Cloudflare Pages"
+echo "✅ Staging déployé — develop.planningia.pages.dev"

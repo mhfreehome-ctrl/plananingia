@@ -51,7 +51,7 @@ cd "$PLAN/worker" && npm run deploy
 
 echo ""
 echo "🚀 Déploiement Pages..."
-cd "$PLAN/pages" && npm run build && npx wrangler pages deploy dist --project-name planningia
+cd "$PLAN/pages" && npm run build && npx wrangler pages deploy dist --project-name planningia --branch main
 
 echo ""
 echo "📦 Push Git main..."

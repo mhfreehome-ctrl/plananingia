@@ -1,6 +1,6 @@
-const BASE = import.meta.env.PROD
-  ? 'https://planningai-api.mhfreehome.workers.dev/api'
-  : '/api'
+// VITE_API_BASE défini dans .env.production (prod) ou .env.staging (develop)
+const BASE = import.meta.env.VITE_API_BASE ||
+  (import.meta.env.PROD ? 'https://planningai-api.mhfreehome.workers.dev/api' : '/api')
 
 async function req<T>(method: string, path: string, body?: unknown): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
