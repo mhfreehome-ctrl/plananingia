@@ -5,7 +5,10 @@ export default defineConfig({
   plugins: [react()],
   server: {
     proxy: {
-      '/api': 'http://localhost:8787',
+      '/api': {
+        target: 'https://planningai-api.mhfreehome.workers.dev',
+        changeOrigin: true,
+      },
     },
   },
 })

@@ -60,6 +60,7 @@ export default {
   'projects.create': 'Créer le projet',
   'projects.save': 'Enregistrer',
   'projects.progress': 'Avancement',
+  'projects.status.draft': 'Brouillon',
   'projects.status.devis': 'Devis',
   'projects.status.programme': 'Programmé',
   'projects.status.en_cours': 'En cours',

@@ -157,6 +157,14 @@ export const api = {
       put<any>(`/clients/${id}`, data),
     delete: (id: string) => del(`/clients/${id}`),
   },
+  documentImport: {
+    analyzePDF: (fileData: string) =>
+      post<any>('/projects/analyze-document', { file_type: 'pdf', file_data: fileData }),
+    analyzeExcel: (fileContent: string) =>
+      post<any>('/projects/analyze-document', { file_type: 'excel', file_content: fileContent }),
+    create: (data: any) =>
+      post<any>('/projects/from-document', data),
+  },
   companies: {
     me: () => get<any>('/companies/me'),
     update: (data: any) => put<any>('/companies/me', data),

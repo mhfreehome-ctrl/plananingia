@@ -15,6 +15,7 @@ import teamRoutes from './routes/teams'
 import clientRoutes from './routes/clients'
 import companyRoutes from './routes/companies'
 import platformRoutes from './routes/platform'
+import documentImportRoutes from './routes/document-import'
 
 const app = new Hono<{ Bindings: Env }>()
 
@@ -42,6 +43,7 @@ app.route('/api', teamRoutes)
 app.route('/api/clients', clientRoutes)
 app.route('/api/companies', companyRoutes)
 app.route('/api/platform', platformRoutes)
+app.route('/api', documentImportRoutes)
 
 app.notFound((c) => c.json({ error: 'Not found' }, 404))
 app.onError((err, c) => {

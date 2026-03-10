@@ -1,7 +1,296 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useT } from '../../i18n'
 import { api } from '../../api/client'
+
+// ── Import Document Modal ──────────────────────────────────────────────────────
+
+type ImportStep = 'upload' | 'analyzing' | 'confirm' | 'creating'
+
+function ImportModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: (projectId: string) => void }) {
+  const [step, setStep]       = useState<ImportStep>('upload')
+  const [file, setFile]       = useState<File | null>(null)
+  const [error, setError]     = useState('')
+  const [extracted, setExtracted] = useState<any>(null)
+
+  // Champs du formulaire de confirmation
+  const [projectName, setProjectName]   = useState('')
+  const [clientName, setClientName]     = useState('')
+  const [reference, setReference]       = useState('')
+  const [address, setAddress]           = useState('')
+  const [city, setCity]                 = useState('')
+  const [postalCode, setPostalCode]     = useState('')
+  const [startDate, setStartDate]       = useState('')
+  const [durationWeeks, setDurationWeeks] = useState<number>(8)
+
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  const handleFile = (f: File) => {
+    const ext = f.name.split('.').pop()?.toLowerCase() || ''
+    if (!['pdf', 'xlsx', 'xls'].includes(ext)) {
+      setError('Format non supporté. Utilisez PDF ou Excel (.xlsx)')
+      return
+    }
+    setFile(f)
+    setError('')
+  }
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    const f = e.dataTransfer.files[0]
+    if (f) handleFile(f)
+  }
+
+  // Étape 1 → Étape 2 : analyser le document
+  const handleAnalyze = async () => {
+    if (!file) return
+    setError('')
+    setStep('analyzing')
+    try {
+      const ext = file.name.split('.').pop()?.toLowerCase() || ''
+      let result: any
+
+      if (ext === 'pdf') {
+        const base64 = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader()
+          reader.onload = () => resolve((reader.result as string).split(',')[1])
+          reader.onerror = reject
+          reader.readAsDataURL(file)
+        })
+        result = await api.documentImport.analyzePDF(base64)
+      } else {
+        const { read, utils } = await import('xlsx')
+        const buffer = await file.arrayBuffer()
+        const wb = read(buffer, { type: 'buffer' })
+        const content = wb.SheetNames.map(name =>
+          `=== Feuille: ${name} ===\n${utils.sheet_to_csv(wb.Sheets[name])}`
+        ).join('\n\n')
+        result = await api.documentImport.analyzeExcel(content)
+      }
+
+      const data = result.extracted
+      setExtracted(data)
+      // Pré-remplir le formulaire
+      setProjectName(data.project_name || file.name.replace(/\.[^/.]+$/, ''))
+      setClientName(data.client_name || '')
+      setReference(data.reference || '')
+      setAddress(data.address || '')
+      setCity(data.city || '')
+      setPostalCode(data.postal_code || '')
+      setStartDate(data.estimated_start || '')
+      setDurationWeeks(data.estimated_duration_weeks || 8)
+      setStep('confirm')
+    } catch (e: any) {
+      setError(e.message || 'Erreur lors de l\'analyse')
+      setStep('upload')
+    }
+  }
+
+  // Étape 2 → Étape 3 : créer le projet
+  const handleCreate = async () => {
+    if (!projectName.trim()) { setError('Le nom du projet est requis'); return }
+    setError('')
+    setStep('creating')
+    try {
+      const result = await api.documentImport.create({
+        project_name: projectName.trim(),
+        reference: reference.trim() || undefined,
+        client_name: clientName.trim() || undefined,
+        address: address.trim() || undefined,
+        city: city.trim() || undefined,
+        postal_code: postalCode.trim() || undefined,
+        estimated_start: startDate || undefined,
+        estimated_duration_weeks: durationWeeks,
+        selected_lots: extracted?.selected_lots,
+        extra_lots: extracted?.extra_lots,
+        dependencies: extracted?.dependencies,
+      })
+      onSuccess(result.project.id)
+    } catch (e: any) {
+      setError(e.message || 'Erreur lors de la création du projet')
+      setStep('confirm')
+    }
+  }
+
+  const lotsCount = (extracted?.selected_lots?.length || 0) + (extracted?.extra_lots?.length || 0)
+  const depsCount = extracted?.dependencies?.length || 0
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-xl">
+
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b">
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900">📄 Importer un devis / CCTP</h2>
+            {step === 'confirm' && (
+              <p className="text-xs text-gray-400 mt-0.5">
+                Étape 2 / 2 — Vérifiez les informations extraites avant de créer le projet
+              </p>
+            )}
+          </div>
+          {step !== 'analyzing' && step !== 'creating' && (
+            <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">×</button>
+          )}
+        </div>
+
+        <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
+
+          {/* ── STEP : analyzing ── */}
+          {(step === 'analyzing' || step === 'creating') && (
+            <div className="text-center py-10 space-y-3">
+              <div className="text-4xl animate-spin inline-block">⚙️</div>
+              <p className="text-gray-700 font-medium">
+                {step === 'analyzing' ? 'Analyse du document en cours…' : 'Création du projet…'}
+              </p>
+              <p className="text-sm text-gray-500">
+                {step === 'analyzing'
+                  ? 'Claude lit le document et identifie les corps de métier.\nCela peut prendre 15–30 secondes.'
+                  : 'Création des lots et dépendances dans la base…'}
+              </p>
+            </div>
+          )}
+
+          {/* ── STEP : upload ── */}
+          {step === 'upload' && (
+            <>
+              <div
+                onDrop={handleDrop}
+                onDragOver={e => e.preventDefault()}
+                onClick={() => inputRef.current?.click()}
+                className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${
+                  file ? 'border-green-400 bg-green-50' : 'border-gray-300 hover:border-indigo-400 hover:bg-indigo-50'
+                }`}>
+                <input
+                  ref={inputRef} type="file" accept=".pdf,.xlsx,.xls" className="hidden"
+                  onChange={e => e.target.files?.[0] && handleFile(e.target.files[0])}
+                />
+                {file ? (
+                  <div className="space-y-1">
+                    <div className="text-2xl">{file.name.endsWith('.pdf') ? '📕' : '📗'}</div>
+                    <p className="font-medium text-green-700">{file.name}</p>
+                    <p className="text-xs text-gray-500">{(file.size / 1024).toFixed(0)} Ko</p>
+                    <button
+                      onClick={e => { e.stopPropagation(); setFile(null) }}
+                      className="text-xs text-red-500 hover:underline mt-1">
+                      Changer de fichier
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <div className="text-3xl text-gray-300">📁</div>
+                    <p className="text-gray-600">Glissez un fichier ou cliquez pour sélectionner</p>
+                    <p className="text-xs text-gray-400">PDF, Excel (.xlsx) — max 20 Mo</p>
+                  </div>
+                )}
+              </div>
+              {error && <p className="text-sm text-red-600 bg-red-50 rounded p-2">{error}</p>}
+              <div className="bg-blue-50 rounded-lg p-3 text-xs text-blue-700 space-y-1">
+                <p className="font-semibold">Comment ça fonctionne :</p>
+                <p>• Claude analyse le document (devis, DQE, CCTP…)</p>
+                <p>• Les informations extraites vous sont présentées pour validation</p>
+                <p>• Vous confirmez et ajustez avant la création du projet</p>
+              </div>
+            </>
+          )}
+
+          {/* ── STEP : confirm ── */}
+          {step === 'confirm' && extracted && (
+            <>
+              {/* Résumé IA */}
+              <div className="bg-green-50 border border-green-200 rounded-lg p-3 flex items-start gap-2">
+                <span className="text-green-600 text-lg">✓</span>
+                <div className="text-sm text-green-800">
+                  <p className="font-semibold">Document analysé avec succès</p>
+                  <p className="text-green-700 mt-0.5">
+                    {lotsCount} lot{lotsCount > 1 ? 's' : ''} détecté{lotsCount > 1 ? 's' : ''}
+                    {depsCount > 0 ? ` · ${depsCount} dépendance${depsCount > 1 ? 's' : ''}` : ''}
+                  </p>
+                </div>
+              </div>
+
+              {/* Informations projet */}
+              <div className="space-y-3">
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Informations projet</p>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="col-span-2">
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Nom du projet *</label>
+                    <input type="text" className="input w-full" value={projectName}
+                      onChange={e => setProjectName(e.target.value)} placeholder="Nom du projet" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Client / Maître d'ouvrage</label>
+                    <input type="text" className="input w-full" value={clientName}
+                      onChange={e => setClientName(e.target.value)} placeholder="Nom du client" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Référence / N° devis</label>
+                    <input type="text" className="input w-full" value={reference}
+                      onChange={e => setReference(e.target.value)} placeholder="Ex: DEV-2026-042" />
+                  </div>
+                  <div className="col-span-2">
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Adresse du chantier</label>
+                    <input type="text" className="input w-full" value={address}
+                      onChange={e => setAddress(e.target.value)} placeholder="Adresse" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Ville</label>
+                    <input type="text" className="input w-full" value={city}
+                      onChange={e => setCity(e.target.value)} placeholder="Ville" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Code postal</label>
+                    <input type="text" className="input w-full" value={postalCode}
+                      onChange={e => setPostalCode(e.target.value)} placeholder="57000" />
+                  </div>
+                </div>
+
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider pt-1">Planning</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Date de début *</label>
+                    <input type="date" className="input w-full" value={startDate}
+                      onChange={e => setStartDate(e.target.value)} />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Durée (semaines) *</label>
+                    <input type="number" className="input w-full" min={1} max={260}
+                      value={durationWeeks} onChange={e => setDurationWeeks(Number(e.target.value))} />
+                  </div>
+                </div>
+              </div>
+
+              {error && <p className="text-sm text-red-600 bg-red-50 rounded p-2">{error}</p>}
+            </>
+          )}
+        </div>
+
+        {/* Footer */}
+        {step === 'upload' && (
+          <div className="flex justify-end gap-3 px-6 py-4 border-t bg-gray-50 rounded-b-xl">
+            <button onClick={onClose} className="btn btn-secondary">Annuler</button>
+            <button onClick={handleAnalyze} disabled={!file}
+              className="btn btn-accent disabled:opacity-50 disabled:cursor-not-allowed">
+              🔍 Analyser le document
+            </button>
+          </div>
+        )}
+        {step === 'confirm' && (
+          <div className="flex justify-between gap-3 px-6 py-4 border-t bg-gray-50 rounded-b-xl">
+            <button onClick={() => { setStep('upload'); setExtracted(null) }} className="btn btn-secondary">
+              ← Recommencer
+            </button>
+            <button onClick={handleCreate} disabled={!projectName.trim() || !startDate || !durationWeeks}
+              className="btn btn-accent disabled:opacity-50 disabled:cursor-not-allowed">
+              ✅ Créer le projet
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
@@ -122,6 +411,7 @@ export default function Projects() {
   const [projects, setProjects] = useState<any[]>([])
   const [loading, setLoading]   = useState(true)
   const [duplicating, setDuplicating] = useState<string | null>(null)
+  const [showImport, setShowImport] = useState(false)
 
   const handleDuplicate = async (p: any) => {
     if (!window.confirm(`Dupliquer "${p.name}" avec tous ses lots et sous-tâches ?`)) return
@@ -255,8 +545,20 @@ export default function Projects() {
       {/* ── En-tête ── */}
       <div className="flex items-center justify-between gap-4">
         <h1 className="text-2xl font-bold text-gray-900">{t('projects.title')}</h1>
-        <Link to="/projects/new" className="btn btn-accent">{t('projects.new')}</Link>
+        <div className="flex items-center gap-2">
+          <button onClick={() => setShowImport(true)} className="btn btn-secondary">
+            📄 Importer un devis
+          </button>
+          <Link to="/projects/new" className="btn btn-accent">{t('projects.new')}</Link>
+        </div>
       </div>
+
+      {showImport && (
+        <ImportModal
+          onClose={() => setShowImport(false)}
+          onSuccess={(id) => { setShowImport(false); navigate(`/projects/${id}`) }}
+        />
+      )}
 
       {/* ── Barre recherche + mode + tri ── */}
       <div className="flex flex-wrap items-center gap-3">

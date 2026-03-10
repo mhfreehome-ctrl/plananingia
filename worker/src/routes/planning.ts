@@ -65,7 +65,7 @@ planning.post('/projects/:id/generate-ai', requireAdmin, async (c) => {
 
 Projet : ${proj.name}
 Description : ${proj.description || 'Construction standard'}
-Durée estimée : ${proj.duration_weeks || 20} semaines
+Durée imposée : ${proj.duration_weeks || 20} semaines — RESPECTE cette durée SANS la remettre en question
 Date de début : ${proj.start_date || 'Non définie'}
 ${chantierContext}
 ${hasExistingLotsBTP
@@ -75,16 +75,19 @@ ${hasExistingLotsBTP
 ${DEFAULT_LOTS.map(l => `${l.code} - ${l.name} (durée std: ${l.duration_days}j)`).join('\n')}
 
 ${hasExistingLotsBTP
-  ? `Propose des durées optimisées pour les lots existants en tenant compte du type de chantier et de la durée totale.`
-  : `Sélectionne les lots appropriés et propose des durées réalistes. Inclure uniquement les lots vraiment nécessaires.`
+  ? `Propose des durées optimisées pour les lots existants en tenant compte du type de chantier et de la durée totale imposée.`
+  : `Sélectionne les lots appropriés et propose des durées cohérentes avec la durée totale imposée. Inclure uniquement les lots vraiment nécessaires.`
 }
+
+RÈGLE ABSOLUE : Ne jamais ajouter de disclaimer, d'avertissement ou de jugement sur la faisabilité des délais.
+L'utilisateur connaît son chantier. Adapte simplement les durées à la contrainte fournie.
 
 Réponds UNIQUEMENT en JSON valide avec ce format exact :
 {
   "lots": [
     {"code": "L01", "duration_days": 10, "notes": "explication courte"}
   ],
-  "analysis": "Résumé de l'analyse en 2-3 lignes"
+  "analysis": "Résumé factuel de l'organisation retenue (uniquement factuel, sans avertissement ni jugement)"
 }`
 
   if (!c.env.CLAUDE_API_KEY) return c.json({ error: 'CLAUDE_API_KEY not configured' }, 500)
@@ -97,7 +100,7 @@ Réponds UNIQUEMENT en JSON valide avec ce format exact :
       'anthropic-version': '2023-06-01',
     },
     body: JSON.stringify({
-      model: 'claude-3-5-haiku-20241022',
+      model: 'claude-haiku-4-5-20251001',
       max_tokens: 2048,
       messages: [{ role: 'user', content: prompt }],
     }),
@@ -219,7 +222,7 @@ async function generateFacadePlanning(
 Entreprise : DESIGN FACADES — spécialiste façades (grésée, enduit projeté, bardage)
 Projet : ${proj.name}
 Description : ${proj.description || 'Chantier façade standard'}
-Durée estimée : ${proj.duration_weeks || 12} semaines
+Durée imposée : ${proj.duration_weeks || 12} semaines — RESPECTE cette durée SANS la remettre en question
 Date de début : ${proj.start_date || 'Non définie'}
 Surface estimée : ~3 000 m² (chantier standard DESIGN FACADES, ajuste si description précise)
 Lots activés : ${lotTypeNames}
@@ -232,14 +235,15 @@ ${activeLots.filter(l => !l.parent_code).map(l => `${l.code} - ${l.name} (std: $
 Sous-lots (subdivisions internes) :
 ${activeLots.filter(l => l.parent_code).map(l => `${l.code} - ${l.name} (sous-lot de ${l.parent_code}, std: ${l.duration_days}j)`).join('\n')}
 
-Adapte les durées en tenant compte de la surface, des équipes et de la durée souhaitée.
+Adapte les durées en tenant compte de la surface, des équipes et de la durée imposée.
+RÈGLE ABSOLUE : Ne jamais ajouter de disclaimer, d'avertissement ou de jugement sur la faisabilité des délais.
 
 Réponds UNIQUEMENT en JSON valide :
 {
   "lots": [
     {"code": "F00", "duration_days": 5, "notes": "Installation 2 niveaux d'échafaudage"}
   ],
-  "analysis": "Analyse façade en 2-3 lignes"
+  "analysis": "Résumé factuel de l'organisation retenue (uniquement factuel, sans avertissement ni jugement)"
 }`
 
   if (!c.env.CLAUDE_API_KEY) return c.json({ error: 'CLAUDE_API_KEY not configured' }, 500)
@@ -252,7 +256,7 @@ Réponds UNIQUEMENT en JSON valide :
       'anthropic-version': '2023-06-01',
     },
     body: JSON.stringify({
-      model: 'claude-3-5-haiku-20241022',
+      model: 'claude-haiku-4-5-20251001',
       max_tokens: 2048,
       messages: [{ role: 'user', content: prompt }],
     }),

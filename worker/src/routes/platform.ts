@@ -210,30 +210,57 @@ platform.post('/generate-trade-catalog', requireSuperAdmin, async (c) => {
     return c.json({ error: 'Ce catalogue existe déjà. Utilisez overwrite: true pour le régénérer.' }, 409)
   }
 
-  const prompt = `Tu es un expert BTP français. Génère un catalogue complet de lots et tâches pour le corps de métier suivant :
+  const prefix = trade_code.substring(0, 2).toUpperCase()
+  const prompt = `Tu es un expert BTP français, chef de projet et planificateur chantier expérimenté.
+Génère un catalogue de lots pour le corps de métier suivant :
 
 Corps de métier : ${trade_name}
-Code : ${trade_code}
+Code préfixe : ${prefix} (ex: EL01, EL02…)
 ${description ? `Description : ${description}` : ''}
 
-Génère une planification réaliste avec :
-- Entre 5 et 12 lots (phases de travail), chacun avec un code court (${trade_code.substring(0,2).toUpperCase()}01, ${trade_code.substring(0,2).toUpperCase()}02...), un nom en français, une durée standard en jours ouvrés, et une couleur hex adaptée.
-- Des dépendances FS (Fin→Début) ou SS (Début→Début) logiques entre les lots.
-- Pour chaque lot, 2 à 5 sous-tâches concrètes.
+══ RÈGLES IMPÉRATIVES ══
 
-Respecte la logique métier réelle (pré-études, approvisionnements, exécution, réception, levée de réserves).
+1. STRUCTURE DES PHASES (dans cet ordre logique) :
+   a) Études / conception si nécessaire (BET, ALDES, plans, DOE) — toujours en PREMIER, avant ou pendant la prépa
+   b) Préparation de chantier — installation, repérage, traçage — DURÉE MAX 1 jour (mobilisation)
+   c) Approvisionnement matériel — UN SEUL lot qui regroupe TOUTES les fournitures — démarre en SS avec la prépa
+   d) Exécution — cœur des travaux, peut être découpé en 2-4 lots séquentiels selon les phases techniques
+   e) Tests / essais / contrôles — selon le corps de métier
+   f) Réception / levée de réserves — 1 à 2 jours max
 
-Réponds UNIQUEMENT en JSON valide, sans commentaires, sans markdown, sans balises :
+2. RÈGLE APPROVISIONNEMENT STRICTE :
+   - Créer UN SEUL lot "Approvisionnement matériel" avec TOUTES les fournitures en sous-tâches
+   - INTERDIT de créer "Appro courant fort" + "Appro courant faible" séparément
+   - L'appro est en SS (Début→Début) avec la préparation, lag_days: 0
+   - L'appro se termine AVANT la fin de l'exécution principale
+
+3. DURÉES RÉALISTES :
+   - Études / conception : 3 à 7 jours
+   - Préparation chantier : 1 jour (pas plus sauf gros œuvre)
+   - Approvisionnement : 5 à 15 jours (délais fournisseurs)
+   - Exécution : 10 à 45 jours selon complexité
+   - Tests / essais : 2 à 5 jours
+   - Réception : 1 à 2 jours
+
+4. DÉPENDANCES SANS CROISEMENT :
+   - Chaîne principale linéaire : Études→Prépa→Exécution→Tests→Réception
+   - L'appro est en SS avec la prépa (démarre en même temps)
+   - Chaque lot n'a qu'un seul prédécesseur sauf l'exécution (peut dépendre de l'appro ET de la prépa)
+   - PAS de cycles, PAS de dépendances croisées
+
+5. NOMBRE DE LOTS : 5 à 9 lots maximum (lisibilité Gantt)
+
+Réponds UNIQUEMENT en JSON valide, sans commentaires, sans markdown :
 {
   "lots": [
-    { "code": "XX01", "name": "...", "duration_days": 5, "color": "#hex", "sort_order": 1 }
+    { "code": "${prefix}01", "name": "...", "duration_days": 5, "color": "#hex", "sort_order": 1 }
   ],
   "deps": [
-    { "pred_code": "XX01", "succ_code": "XX02", "dep_type": "FS", "lag_days": 0 }
+    { "pred_code": "${prefix}01", "succ_code": "${prefix}02", "dep_type": "FS", "lag_days": 0 }
   ],
   "tasks": {
-    "XX01": ["Tâche 1", "Tâche 2"],
-    "XX02": ["Tâche A", "Tâche B", "Tâche C"]
+    "${prefix}01": ["Sous-tâche 1", "Sous-tâche 2"],
+    "${prefix}02": ["Sous-tâche A", "Sous-tâche B"]
   }
 }`
 
