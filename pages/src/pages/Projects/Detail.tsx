@@ -1031,8 +1031,18 @@ function ProjectEditModal({ project, onClose, onSubmit }: any) {
   const t = useT()
   const { user: modalUser } = useAuth()
   const isMetier = modalUser?.company_type === 'entreprise_metier'
+  const isSuperAdmin = !modalUser?.company_id
   const [lotTypes, setLotTypes] = useState<string[]>(() => parseLotTypes(project.lot_types))
   const [clientId, setClientId] = useState<string | null>(project.client_id || null)
+  const [companies, setCompanies] = useState<{ id: string; name: string }[]>([])
+  const [companyId, setCompanyId] = useState<string>(project.company_id || '')
+
+  useEffect(() => {
+    if (isSuperAdmin) {
+      api.platform.companies().then(setCompanies).catch(() => {})
+    }
+  }, [isSuperAdmin])
+
   const [form, setForm] = useState({
     name: project.name || '',
     reference: project.reference || '',
@@ -1069,12 +1079,27 @@ function ProjectEditModal({ project, onClose, onSubmit }: any) {
           budget_ht: form.budget_ht ? Number(form.budget_ht) : null,
           lot_types: lotTypes.length > 0 ? lotTypes : null,
           meeting_time: form.meeting_time || null,
+          company_id: isSuperAdmin ? (companyId || null) : undefined,
         })}>
           <div className="modal-body grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="field sm:col-span-2">
               <label className="label">{t('projects.name')} *</label>
               <input className="input" value={form.name} onChange={e => set('name', e.target.value)} required />
             </div>
+            {isSuperAdmin && (
+              <div className="field sm:col-span-2">
+                <label className="label">🏢 Entreprise propriétaire</label>
+                <select className="select" value={companyId} onChange={e => setCompanyId(e.target.value)}>
+                  <option value="">— Global (aucune entreprise) —</option>
+                  {companies.map(c => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+                <p className="mt-1 text-xs text-gray-400">
+                  Champ visible uniquement en mode superadmin. Les projets "global" sont visibles par toutes les entreprises.
+                </p>
+              </div>
+            )}
             <div className="field">
               <label className="label">{t('projects.reference')}</label>
               <input className="input" value={form.reference} onChange={e => set('reference', e.target.value)} />

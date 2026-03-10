@@ -138,17 +138,22 @@ projects.put('/:id', requireWrite, async (c) => {
     ? (Array.isArray(body.lot_types) ? JSON.stringify(body.lot_types) : body.lot_types)
     : null
 
+  // Seul un superadmin (sans company_id) peut changer l'entreprise propriétaire d'un projet
+  const newCompanyId = (!user.company_id && body.company_id !== undefined)
+    ? (body.company_id || null)
+    : proj.company_id
+
   await c.env.DB.prepare(`
     UPDATE projects SET name=?, reference=?, address=?, city=?, postal_code=?, client_name=?,
       client_email=?, client_phone=?, client_id=?, description=?, start_date=?, duration_weeks=?, budget_ht=?,
-      status=?, lot_types=?, meeting_time=?, project_type=?, updated_at=datetime('now')
+      status=?, lot_types=?, meeting_time=?, project_type=?, company_id=?, updated_at=datetime('now')
     WHERE id=?
   `).bind(body.name, body.reference || null, body.address || null, body.city || null, body.postal_code || null,
     body.client_name || null, body.client_email || null, body.client_phone || null,
     body.client_id || null,
     body.description || null, body.start_date || null, body.duration_weeks || null,
     body.budget_ht || null, body.status || 'draft', lotTypesValue,
-    body.meeting_time || null, body.project_type || 'standalone', id).run()
+    body.meeting_time || null, body.project_type || 'standalone', newCompanyId, id).run()
 
   return c.json({ ok: true })
 })
