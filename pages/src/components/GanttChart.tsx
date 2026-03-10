@@ -54,6 +54,9 @@ interface Props {
   highlightedLotIds?: Set<string>            // lots à mettre en valeur (vue utilisateur)
   onLotClick?: (lotId: string) => void       // clic simple sur un lot → fiche
   onTaskClick?: (task: LotTask, parentLot: Lot) => void  // clic sur une sous-tâche → édition directe
+  onDependencyCreate?: (predId: string, succId: string, type: string, lag: number) => Promise<void>
+  onDependencyDelete?: (depId: string) => Promise<void>
+  onDependencyUpdate?: (depId: string, type: string, lag: number) => Promise<void>
 }
 
 interface DragState {
@@ -66,6 +69,16 @@ interface DragState {
   deltaDays: number
   mouseX: number
   mouseY: number
+}
+
+interface LinkDragState {
+  sourceLotId: string
+  handle: 'end' | 'start'   // 'end' = bord droit (→ FS), 'start' = bord gauche (→ SS)
+  startX: number             // Coordonnées SVG chart (scroll inclus)
+  startY: number
+  cursorX: number
+  cursorY: number
+  targetLotId?: string       // Lot survolé = cible potentielle
 }
 
 type Zoom = 'day' | 'week' | 'month'
@@ -91,6 +104,20 @@ function fmtShort(d: Date): string {
 function daysBetween(start: Date, isoDate: string): number {
   const target = new Date(isoDate)
   return Math.round((target.getTime() - start.getTime()) / (1000 * 60 * 60 * 24))
+}
+
+// Detect if creating a dep (predId → succId) would create a cycle in existing deps
+function wouldCreateCycle(predId: string, succId: string, deps: Dep[]): boolean {
+  const visited = new Set<string>()
+  const queue = [succId]
+  while (queue.length > 0) {
+    const curr = queue.shift()!
+    if (curr === predId) return true
+    if (visited.has(curr)) continue
+    visited.add(curr)
+    deps.filter(d => d.predecessor_id === curr).forEach(d => queue.push(d.successor_id))
+  }
+  return false
 }
 
 // Compute which lots must cascade when `movedId`'s finish shifts right by `delta` days
@@ -127,7 +154,7 @@ function computeCascade(
   })
 }
 
-export default function GanttChart({ lots, deps, projectStartDate, lang = 'fr', projectId, onRefresh, readOnly = false, milestones = [], onMilestoneClick, lotTasks = {}, lotAssignments = {}, highlightedLotIds = new Set<string>(), onLotClick, onTaskClick }: Props) {
+export default function GanttChart({ lots, deps, projectStartDate, lang = 'fr', projectId, onRefresh, readOnly = false, milestones = [], onMilestoneClick, lotTasks = {}, lotAssignments = {}, highlightedLotIds = new Set<string>(), onLotClick, onTaskClick, onDependencyCreate, onDependencyDelete, onDependencyUpdate }: Props) {
   const t = useT()
   const [zoom, setZoom] = useState<Zoom>('week')
   const [showSubTasks, setShowSubTasks] = useState(false)
@@ -135,6 +162,16 @@ export default function GanttChart({ lots, deps, projectStartDate, lang = 'fr', 
   const [drag, setDrag] = useState<DragState | null>(null)
   const [saving, setSaving] = useState(false)
   const [exporting, setExporting] = useState(false)
+  // ── Dessin de liens visuels ──
+  const [hoveredLotId, setHoveredLotId] = useState<string | null>(null)
+  const [linkDrag, setLinkDrag] = useState<LinkDragState | null>(null)
+  const [hoveredDepId, setHoveredDepId] = useState<string | null>(null)
+  const [contextMenu, setContextMenu] = useState<{ dep: Dep; x: number; y: number } | null>(null)
+  const [editingDep, setEditingDep] = useState<{ dep: Dep; x: number; y: number } | null>(null)
+  const [editDepType, setEditDepType] = useState('FS')
+  const [editDepLag, setEditDepLag] = useState(0)
+  const linkDragRef = useRef<LinkDragState | null>(null)
+  const lotMapRef = useRef<Record<string, { x: number; y: number; w: number }>>({})
   const svgRef = useRef<SVGSVGElement>(null)
   const chartAreaRef = useRef<HTMLDivElement>(null)
   const ganttRef = useRef<HTMLDivElement>(null)
@@ -231,6 +268,7 @@ export default function GanttChart({ lots, deps, projectStartDate, lang = 'fr', 
       : l.duration_days
     lotMap[l.id] = { x: dayToX(effectiveStart), y: lotY(l.id) + ROW_H / 2, w: durationToW(effectiveDuration) }
   })
+  lotMapRef.current = lotMap  // kept in sync pour les event handlers asynchrones
 
   // Global mouse handlers — only active during drag
   useEffect(() => {
@@ -382,6 +420,69 @@ export default function GanttChart({ lots, deps, projectStartDate, lang = 'fr', 
       setZoom(origZoom)
       setExporting(false)
     }
+  }
+
+  // ── Ferme le context menu au prochain clic ailleurs ──
+  useEffect(() => {
+    if (!contextMenu) return
+    const close = () => setContextMenu(null)
+    document.addEventListener('click', close)
+    return () => document.removeEventListener('click', close)
+  }, [contextMenu])
+
+  // ── Dessin d'un lien par drag depuis un handle ──
+  function startLinkDrag(
+    e: React.MouseEvent<SVGCircleElement>,
+    lotId: string,
+    handle: 'start' | 'end',
+    startX: number,
+    startY: number
+  ) {
+    e.preventDefault()
+    e.stopPropagation()
+    setTooltip(null)
+    const state: LinkDragState = { sourceLotId: lotId, handle, startX, startY, cursorX: startX, cursorY: startY, targetLotId: undefined }
+    linkDragRef.current = state
+    setLinkDrag(state)
+
+    const onMove = (ev: MouseEvent) => {
+      const area = chartAreaRef.current
+      if (!area) return
+      const rect = area.getBoundingClientRect()
+      const cursorChartX = ev.clientX - rect.left + area.scrollLeft
+      const cursorChartY = ev.clientY - rect.top + area.scrollTop
+      let targetId: string | undefined
+      for (const [id, pos] of Object.entries(lotMapRef.current)) {
+        if (
+          id !== linkDragRef.current!.sourceLotId &&
+          cursorChartX >= pos.x && cursorChartX <= pos.x + pos.w &&
+          cursorChartY >= pos.y - ROW_H / 2 + 6 && cursorChartY <= pos.y + ROW_H / 2 - 6
+        ) { targetId = id; break }
+      }
+      const next = { ...linkDragRef.current!, cursorX: cursorChartX, cursorY: cursorChartY, targetLotId: targetId }
+      linkDragRef.current = next
+      setLinkDrag({ ...next })
+    }
+
+    const onUp = async () => {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+      const ld = linkDragRef.current
+      linkDragRef.current = null
+      setLinkDrag(null)
+      setHoveredLotId(null)
+      if (!ld?.targetLotId || !onDependencyCreate) return
+      const predId = ld.handle === 'end' ? ld.sourceLotId : ld.targetLotId
+      const succId = ld.handle === 'end' ? ld.targetLotId : ld.sourceLotId
+      // Anti-doublon
+      if (depsRef.current.find(d => d.predecessor_id === predId && d.successor_id === succId)) return
+      // Anti-cycle
+      if (wouldCreateCycle(predId, succId, depsRef.current)) return
+      await onDependencyCreate(predId, succId, 'FS', 0)
+    }
+
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
   }
 
   return (
@@ -567,8 +668,12 @@ export default function GanttChart({ lots, deps, projectStartDate, lang = 'fr', 
                   return (
                     <g key={d.id}>
                       <path d={`M${x1},${y1} C${mid},${y1} ${mid},${y2} ${x2},${y2}`}
-                        fill="none" stroke={d.type === 'SS' ? '#10b981' : '#94a3b8'} strokeWidth="1.5"
-                        strokeDasharray={d.type === 'SS' ? '4 2' : undefined} markerEnd="url(#arrow)" opacity="0.7" />
+                        fill="none"
+                        stroke={d.id === hoveredDepId ? '#6366f1' : (d.type === 'SS' ? '#10b981' : '#94a3b8')}
+                        strokeWidth={d.id === hoveredDepId ? "2.5" : "1.5"}
+                        strokeDasharray={d.type === 'SS' ? '4 2' : undefined}
+                        markerEnd="url(#arrow)"
+                        opacity={d.id === hoveredDepId ? "1" : "0.7"} />
                     </g>
                   )
                 })}
@@ -721,8 +826,8 @@ export default function GanttChart({ lots, deps, projectStartDate, lang = 'fr', 
                 return (
                   <div key={l.id}
                     style={{ position: 'absolute', top: y, left: 0, width: '100%', height: rh }}
-                    onMouseEnter={!drag ? (e) => setTooltip({ lot: l, x: e.clientX, y: e.clientY }) : undefined}
-                    onMouseLeave={!drag ? () => setTooltip(null) : undefined}>
+                    onMouseEnter={!drag && !linkDrag ? (e) => { setTooltip({ lot: l, x: e.clientX, y: e.clientY }); setHoveredLotId(l.id) } : undefined}
+                    onMouseLeave={!drag && !linkDrag ? () => { setTooltip(null); setHoveredLotId(null) } : undefined}>
                     {/* ── Couche 1 : fond pastel ── */}
                     <div style={{
                       position: 'absolute', left: x, top: l.parent_lot_id ? 10 : 8,
@@ -814,6 +919,74 @@ export default function GanttChart({ lots, deps, projectStartDate, lang = 'fr', 
                   </div>
                 )
               })}
+
+              {/* ── SVG interactif : hit paths flèches + handles + ligne de dessin ── */}
+              {!readOnly && (
+                <svg style={{ position: 'absolute', top: 0, left: 0, width: totalW, height: totalH, overflow: 'visible' }}>
+
+                  {/* Hit paths invisibles sur les flèches existantes (clic + clic droit) */}
+                  {deps.map(d => {
+                    const from = lotMap[d.predecessor_id], to = lotMap[d.successor_id]
+                    if (!from || !to) return null
+                    const x1 = from.x + from.w, y1 = from.y, x2 = to.x, y2 = to.y, mid = (x1 + x2) / 2
+                    return (
+                      <path key={`hit-${d.id}`}
+                        d={`M${x1},${y1} C${mid},${y1} ${mid},${y2} ${x2},${y2}`}
+                        fill="none" stroke="black" strokeWidth="12"
+                        style={{ cursor: 'pointer', pointerEvents: 'stroke', opacity: 0 }}
+                        onMouseEnter={() => setHoveredDepId(d.id)}
+                        onMouseLeave={() => setHoveredDepId(null)}
+                        onClick={(e) => { e.stopPropagation(); setEditDepType(d.type); setEditDepLag(d.lag_days); setEditingDep({ dep: d, x: e.clientX, y: e.clientY }) }}
+                        onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); setContextMenu({ dep: d, x: e.clientX, y: e.clientY }) }}
+                      />
+                    )
+                  })}
+
+                  {/* Handles ○ au hover sur une barre de lot */}
+                  {!drag && !linkDrag && hoveredLotId && lotMap[hoveredLotId] && (() => {
+                    const m = lotMap[hoveredLotId]
+                    return (
+                      <g>
+                        {/* Bord gauche → SS */}
+                        <circle cx={m.x} cy={m.y} r={7} fill="white" stroke="#6366f1" strokeWidth="2"
+                          style={{ cursor: 'crosshair' }}
+                          onMouseDown={(e) => startLinkDrag(e, hoveredLotId!, 'start', m.x, m.y)} />
+                        <title>Créer un lien SS (Début-Début)</title>
+                        {/* Bord droit → FS */}
+                        <circle cx={m.x + m.w} cy={m.y} r={7} fill="white" stroke="#6366f1" strokeWidth="2"
+                          style={{ cursor: 'crosshair' }}
+                          onMouseDown={(e) => startLinkDrag(e, hoveredLotId!, 'end', m.x + m.w, m.y)} />
+                      </g>
+                    )
+                  })()}
+
+                  {/* Ligne de dessin en cours */}
+                  {linkDrag && (
+                    <g>
+                      <line
+                        x1={linkDrag.startX} y1={linkDrag.startY}
+                        x2={linkDrag.cursorX} y2={linkDrag.cursorY}
+                        stroke="#6366f1" strokeWidth="2" strokeDasharray="6 3"
+                        style={{ pointerEvents: 'none' }}
+                        markerEnd="url(#arrow-link)" />
+                      {/* Surbrillance de la cible potentielle */}
+                      {linkDrag.targetLotId && lotMap[linkDrag.targetLotId] && (() => {
+                        const m = lotMap[linkDrag.targetLotId!]
+                        return (
+                          <rect x={m.x - 2} y={m.y - 16} width={m.w + 4} height={28}
+                            fill="none" stroke="#6366f1" strokeWidth="2" rx="6" opacity="0.75"
+                            style={{ pointerEvents: 'none' }} />
+                        )
+                      })()}
+                      <defs>
+                        <marker id="arrow-link" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto">
+                          <path d="M0,0 L0,6 L6,3 z" fill="#6366f1" />
+                        </marker>
+                      </defs>
+                    </g>
+                  )}
+                </svg>
+              )}
             </div>
           </div>
         </div>
@@ -834,6 +1007,96 @@ export default function GanttChart({ lots, deps, projectStartDate, lang = 'fr', 
           {tooltip.lot.is_critical ? <div className="text-red-400 font-medium">⚠ Chemin critique</div> : null}
         </div>
       )}
+
+      {/* ── Context menu clic droit sur une flèche ── */}
+      {contextMenu && (
+        <div
+          style={{ position: 'fixed', left: contextMenu.x, top: contextMenu.y, zIndex: 9999 }}
+          className="bg-white border border-gray-200 rounded-lg shadow-xl py-1 text-sm min-w-[160px]"
+          onClick={e => e.stopPropagation()}
+        >
+          <button
+            className="w-full px-4 py-2 hover:bg-gray-50 text-left text-gray-700 flex items-center gap-2"
+            onClick={() => {
+              setEditDepType(contextMenu.dep.type)
+              setEditDepLag(contextMenu.dep.lag_days)
+              setEditingDep({ dep: contextMenu.dep, x: contextMenu.x, y: contextMenu.y })
+              setContextMenu(null)
+            }}
+          >
+            ✏️ Modifier
+          </button>
+          <button
+            className="w-full px-4 py-2 hover:bg-red-50 text-left text-red-600 flex items-center gap-2"
+            onClick={async (e) => {
+              e.stopPropagation()
+              setContextMenu(null)
+              if (onDependencyDelete) await onDependencyDelete(contextMenu.dep.id)
+            }}
+          >
+            🗑 Supprimer
+          </button>
+        </div>
+      )}
+
+      {/* ── Popover d'édition d'un lien ── */}
+      {editingDep && (() => {
+        const pred = lots.find(l => l.id === editingDep.dep.predecessor_id)
+        const succ = lots.find(l => l.id === editingDep.dep.successor_id)
+        const safeX = Math.min(editingDep.x, (typeof window !== 'undefined' ? window.innerWidth : 1200) - 260)
+        const safeY = Math.min(editingDep.y, (typeof window !== 'undefined' ? window.innerHeight : 800) - 220)
+        return (
+          <div
+            style={{ position: 'fixed', left: safeX, top: safeY, zIndex: 9998 }}
+            className="bg-white border border-gray-200 rounded-xl shadow-2xl p-4 min-w-[230px]"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-2">
+              <h4 className="text-sm font-semibold text-gray-800">Modifier le lien</h4>
+              <button onClick={() => setEditingDep(null)} className="text-gray-400 hover:text-gray-600 text-lg leading-none">✕</button>
+            </div>
+            <div className="text-xs text-gray-500 mb-3 font-mono">
+              {pred?.code ?? '?'} <span className="text-gray-400">→</span> {succ?.code ?? '?'}
+            </div>
+            {/* Sélecteur de type */}
+            <div className="flex gap-1 mb-3">
+              {['FS', 'SS', 'FF'].map(ty => (
+                <button key={ty}
+                  onClick={() => setEditDepType(ty)}
+                  className={`flex-1 py-1.5 rounded text-xs font-bold transition-colors ${editDepType === ty ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                >
+                  {ty}
+                </button>
+              ))}
+            </div>
+            {/* Décalage */}
+            <div className="flex items-center gap-2 mb-4">
+              <span className="text-xs text-gray-600 whitespace-nowrap">Décalage</span>
+              <input
+                type="number" min={0} value={editDepLag}
+                onChange={e => setEditDepLag(Math.max(0, Number(e.target.value)))}
+                className="input w-20 text-xs py-1"
+              />
+              <span className="text-xs text-gray-500">jours</span>
+            </div>
+            {/* Actions */}
+            <div className="flex gap-2">
+              <button onClick={() => setEditingDep(null)}
+                className="flex-1 btn btn-ghost btn-sm text-xs">
+                Annuler
+              </button>
+              <button
+                onClick={async () => {
+                  if (onDependencyUpdate) await onDependencyUpdate(editingDep.dep.id, editDepType, editDepLag)
+                  setEditingDep(null)
+                }}
+                className="flex-1 btn btn-primary btn-sm text-xs">
+                Sauver
+              </button>
+            </div>
+          </div>
+        )
+      })()}
 
       {/* Drag badge — follows cursor */}
       {drag && drag.deltaDays !== 0 && (() => {
