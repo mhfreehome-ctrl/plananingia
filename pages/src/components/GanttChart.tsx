@@ -813,7 +813,7 @@ export default function GanttChart({ lots, deps, projectStartDate, lang = 'fr', 
                     <g style={{ pointerEvents: 'none' }}>
                       {/* Ligne rouge verticale pleine hauteur */}
                       <line x1={tx} y1={0} x2={tx} y2={totalH}
-                        stroke="#ef4444" strokeWidth="1.5" opacity="0.75" />
+                        stroke="#ef4444" strokeWidth="3" opacity="0.75" />
                       {/* Badge "Aujourd'hui" dans la zone header (y négatif → overflow:visible) */}
                       <rect x={tx - 31} y={-19} width={62} height={17} rx={3}
                         fill="#ef4444" opacity="0.92" />
