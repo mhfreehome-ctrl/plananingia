@@ -71,8 +71,8 @@ const NAF_METIERS: Record<string, string> = {
   // Études / Maîtrise d'œuvre
   '71.11': "Architecture / Maîtrise d'œuvre",
   '71.11Z': "Architecture / Maîtrise d'œuvre",
-  '71.12': 'Bureau d'études',
-  '71.12B': 'Ingénierie / Bureau d'études',
+  '71.12': "Bureau d'études",
+  '71.12B': "Ingénierie / Bureau d'études",
   // Nettoyage
   '81.21': 'Nettoyage',
   '81.21Z': 'Nettoyage de bâtiments',
