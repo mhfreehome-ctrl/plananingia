@@ -153,9 +153,19 @@ function AddSubModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
     setSiretStatus('loading'); setSiretInfo('')
     const res = await lookupSiret(form.siret)
     if (!res) { setSiretStatus('error'); return }
-    setForm(f => ({ ...f, company_name: res.nom || f.company_name }))
+    setForm(f => ({
+      ...f,
+      company_name: res.nom || f.company_name,
+      first_name: res.gerantPrenom || f.first_name,
+      last_name: res.gerantNom || f.last_name,
+      trade: res.metier || f.trade,
+    }))
     setSiretStatus(res.etat === 'A' ? 'ok' : 'inactive')
-    setSiretInfo(res.activite ? `${res.activite}${res.adresse ? ' · ' + res.adresse : ''}` : '')
+    const infoparts: string[] = []
+    if (res.metier) infoparts.push(res.metier)
+    else if (res.activite) infoparts.push(res.activite)
+    if (res.gerantPrenom || res.gerantNom) infoparts.push(`Gérant : ${[res.gerantPrenom, res.gerantNom].filter(Boolean).join(' ')}`)
+    setSiretInfo(infoparts.join(' · '))
   }
 
   const handleSubmit = async (e: React.FormEvent) => {

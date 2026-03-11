@@ -1470,7 +1470,13 @@ function NewSubModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
     setSiretStatus('loading')
     const res = await lookupSiret(form.siret)
     if (!res) { setSiretStatus('error'); return }
-    setForm(f => ({ ...f, company_name: res.nom || f.company_name }))
+    setForm(f => ({
+      ...f,
+      company_name: res.nom || f.company_name,
+      first_name: res.gerantPrenom || f.first_name,
+      last_name: res.gerantNom || f.last_name,
+      trade: res.metier || f.trade,
+    }))
     setSiretStatus(res.etat === 'A' ? 'ok' : 'inactive')
   }
 
@@ -1511,9 +1517,9 @@ function NewSubModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
                   {siretStatus === 'loading' ? '⏳' : '🔍'}
                 </button>
               </div>
-              {siretStatus === 'ok' && <p className="mt-1 text-xs text-green-600">✅ Entreprise active</p>}
-              {siretStatus === 'inactive' && <p className="mt-1 text-xs text-amber-600">⚠️ Entreprise cessée</p>}
-              {siretStatus === 'error' && <p className="mt-1 text-xs text-red-500">❌ SIRET introuvable</p>}
+              {siretStatus === 'ok' && <p className="mt-1 text-xs text-green-600">✅ Entreprise active — champs pré-remplis</p>}
+              {siretStatus === 'inactive' && <p className="mt-1 text-xs text-amber-600">⚠️ Entreprise cessée — champs pré-remplis</p>}
+              {siretStatus === 'error' && <p className="mt-1 text-xs text-red-500">❌ SIRET introuvable dans l'annuaire national</p>}
             </div>
             <div>
               <label className="label text-xs">Entreprise</label>

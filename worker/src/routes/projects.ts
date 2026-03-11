@@ -11,35 +11,34 @@ projects.get('/', requireAuth, async (c) => {
   if (user.role === 'admin') {
     if (user.company_id) {
       if (user.access_level === 'conducteur' || user.access_level === 'salarie') {
-        // Conducteur / Salarié : uniquement les projets où ils sont impliqués
+        // Conducteur / Salarié : uniquement les projets de leur entreprise où ils sont impliqués
         rows = await c.env.DB.prepare(`
           SELECT DISTINCT p.*, u.first_name || ' ' || u.last_name as creator_name,
             (SELECT COUNT(*) FROM lots l WHERE l.project_id = p.id) as lot_count,
             (SELECT COALESCE(ROUND(AVG(NULLIF(l.progress_percent, 0))), 0) FROM lots l WHERE l.project_id = p.id) as avg_progress,
           (SELECT COUNT(*) FROM projects sp WHERE sp.parent_project_id = p.id) as sub_projects_count
           FROM projects p LEFT JOIN users u ON u.id = p.created_by
-          WHERE (p.company_id = ? OR p.company_id IS NULL)
+          WHERE p.company_id = ?
           AND (
-            p.company_id IS NULL
-            OR p.created_by = ?
+            p.created_by = ?
             OR EXISTS (SELECT 1 FROM lots l WHERE l.project_id = p.id AND l.subcontractor_id = ?)
             OR EXISTS (
               SELECT 1 FROM lots l JOIN team_members tm ON tm.team_id = l.team_id
               WHERE l.project_id = p.id AND tm.user_id = ?
             )
           )
-          ORDER BY p.company_id IS NULL DESC, p.updated_at DESC
+          ORDER BY p.updated_at DESC
         `).bind(user.company_id, user.sub, user.sub, user.sub).all()
       } else {
-      // Admin / Editeur avec company_id : voir ses projets + modèles globaux (company_id IS NULL)
+      // Admin / Editeur avec company_id : voir UNIQUEMENT ses propres projets (isolation stricte)
       rows = await c.env.DB.prepare(`
         SELECT p.*, u.first_name || ' ' || u.last_name as creator_name,
           (SELECT COUNT(*) FROM lots l WHERE l.project_id = p.id) as lot_count,
           (SELECT COALESCE(ROUND(AVG(NULLIF(l.progress_percent, 0))), 0) FROM lots l WHERE l.project_id = p.id) as avg_progress,
           (SELECT COUNT(*) FROM projects sp WHERE sp.parent_project_id = p.id) as sub_projects_count
         FROM projects p LEFT JOIN users u ON u.id = p.created_by
-        WHERE (p.company_id = ? OR p.company_id IS NULL)
-        ORDER BY p.company_id IS NULL DESC, p.updated_at DESC
+        WHERE p.company_id = ?
+        ORDER BY p.updated_at DESC
       `).bind(user.company_id).all()
       }
     } else {
