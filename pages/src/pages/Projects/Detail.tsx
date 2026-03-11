@@ -6,6 +6,7 @@ import { useAuth } from '../../store/auth'
 import GanttChart from '../../components/GanttChart'
 import ProgressModal from '../../components/ProgressModal'
 import ClientSelect from '../../components/ClientSelect'
+import { lookupSiret } from '../../lib/siretLookup'
 
 type Tab = 'gantt' | 'lots' | 'deps' | 'subprojects'
 
@@ -174,6 +175,8 @@ export default function ProjectDetail() {
   const [editProjectModal, setEditProjectModal] = useState(false)
   const [depModal, setDepModal] = useState(false)
   const [newDep, setNewDep] = useState({ predecessor_id: '', successor_id: '', type: 'FS', lag_days: 0 })
+  const [editDepModal, setEditDepModal] = useState<any | null>(null)  // dep en cours d'édition
+  const [editDep, setEditDep] = useState({ predecessor_id: '', successor_id: '', type: 'FS', lag_days: 0 })
   const [chantierType, setChantierType] = useState<string>('')
   const [milestones, setMilestones] = useState<any[]>([])
   const [milestoneModal, setMilestoneModal] = useState<any>(null) // {milestone?, mode: 'add'|'edit'}
@@ -316,6 +319,17 @@ export default function ProjectDetail() {
 
   const handleDeleteDep = async (depId: string) => {
     await api.deps.delete(depId); await loadData()
+  }
+
+  const handleUpdateDep = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!editDepModal) return
+    try {
+      await api.deps.delete(editDepModal.id)
+      await api.deps.create(id!, { predecessor_id: editDep.predecessor_id, successor_id: editDep.successor_id, type: editDep.type, lag_days: editDep.lag_days })
+      setEditDepModal(null)
+      await loadData()
+    } catch (e: any) { setMsg(e.message) }
   }
 
   // Handlers pour la création/suppression/modification visuelle des liens sur le Gantt
@@ -727,13 +741,19 @@ export default function ProjectDetail() {
                 {deps.map(d => {
                   const pred = lots.find(l => l.id === d.predecessor_id)
                   const succ = lots.find(l => l.id === d.successor_id)
+                  const depColors: Record<string, string> = { FS: 'badge-blue', FF: 'badge-orange', SS: 'badge-green', SF: 'badge-purple' }
                   return (
                     <tr key={d.id}>
                       <td>{pred ? `${pred.code} — ${pred.name}` : '?'}</td>
-                      <td><span className={`badge ${d.type === 'SS' ? 'badge-green' : 'badge-blue'}`}>{d.type}</span></td>
+                      <td><span className={`badge ${depColors[d.type] ?? 'badge-blue'}`}>{d.type}</span></td>
                       <td>{succ ? `${succ.code} — ${succ.name}` : '?'}</td>
                       <td>{d.lag_days}j</td>
-                      <td><button onClick={() => handleDeleteDep(d.id)} className="btn btn-ghost btn-sm text-xs text-red-500">✕</button></td>
+                      <td className="flex gap-1">
+                        <button
+                          onClick={() => { setEditDepModal(d); setEditDep({ predecessor_id: d.predecessor_id, successor_id: d.successor_id, type: d.type, lag_days: d.lag_days }) }}
+                          className="btn btn-ghost btn-sm text-xs text-indigo-500" title="Modifier">✏️</button>
+                        <button onClick={() => handleDeleteDep(d.id)} className="btn btn-ghost btn-sm text-xs text-red-500" title="Supprimer">✕</button>
+                      </td>
                     </tr>
                   )
                 })}
@@ -749,7 +769,7 @@ export default function ProjectDetail() {
       )}
 
       {/* Lot modal */}
-      {lotModal && <LotModal lot={lotModal.lot} mode={lotModal.mode} users={users} employees={employees} teams={teams} onClose={() => setLotModal(null)} onSubmit={handleSaveLot} t={t} />}
+      {lotModal && <LotModal lot={lotModal.lot} mode={lotModal.mode} users={users} employees={employees} teams={teams} onClose={() => setLotModal(null)} onSubmit={handleSaveLot} onUserCreated={(u: any) => setUsers(prev => [...prev, u])} t={t} />}
 
       {/* Catalog modal */}
       {catalogModal && (
@@ -816,6 +836,59 @@ export default function ProjectDetail() {
         />
       )}
 
+      {editDepModal && (
+        <div className="modal-overlay">
+          <div className="modal max-w-md">
+            <div className="modal-header"><h3 className="font-semibold">{t('deps.title')} — Modifier</h3><button onClick={() => setEditDepModal(null)}>✕</button></div>
+            <form onSubmit={handleUpdateDep}>
+              <div className="modal-body space-y-4">
+                <div className="field">
+                  <label className="label">{t('deps.predecessor')}</label>
+                  <select className="select" value={editDep.predecessor_id} onChange={e => setEditDep(d => ({ ...d, predecessor_id: e.target.value }))} required>
+                    <option value="">{t('common.none')}</option>
+                    {lots.map(l => <option key={l.id} value={l.id}>{l.code} — {l.name}</option>)}
+                  </select>
+                </div>
+                <div className="field">
+                  <label className="label">{t('deps.type')}</label>
+                  <select className="select" value={editDep.type} onChange={e => setEditDep(d => ({ ...d, type: e.target.value }))}>
+                    <option value="FS">FS — Fin → Début</option>
+                    <option value="SS">SS — Début → Début</option>
+                    <option value="FF">FF — Fin → Fin</option>
+                    <option value="SF">SF — Début → Fin</option>
+                  </select>
+                  {(() => {
+                    const info: Record<string, [string, string]> = {
+                      FS: ["B démarre après la fin de A — le plus courant", "bg-slate-50 border-slate-200 text-slate-700"],
+                      SS: ["B démarre en même temps que A", "bg-emerald-50 border-emerald-200 text-emerald-700"],
+                      FF: ["B finit en même temps que A", "bg-orange-50 border-orange-200 text-orange-700"],
+                      SF: ["B finit quand A commence — cas rare", "bg-violet-50 border-violet-200 text-violet-700"],
+                    }
+                    const [desc, cls] = info[editDep.type] ?? []
+                    return desc ? <div className={`mt-2 rounded-lg px-3 py-2 text-xs border ${cls}`}>💡 {desc}</div> : null
+                  })()}
+                </div>
+                <div className="field">
+                  <label className="label">{t('deps.successor')}</label>
+                  <select className="select" value={editDep.successor_id} onChange={e => setEditDep(d => ({ ...d, successor_id: e.target.value }))} required>
+                    <option value="">{t('common.none')}</option>
+                    {lots.map(l => <option key={l.id} value={l.id}>{l.code} — {l.name}</option>)}
+                  </select>
+                </div>
+                <div className="field">
+                  <label className="label">{t('deps.lag')} (optionnel)</label>
+                  <input type="number" className="input" min={0} value={editDep.lag_days} onChange={e => setEditDep(d => ({ ...d, lag_days: Number(e.target.value) }))} />
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button type="button" onClick={() => setEditDepModal(null)} className="btn btn-ghost">{t('common.cancel')}</button>
+                <button type="submit" className="btn btn-primary">{t('common.save')}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {depModal && (
         <div className="modal-overlay">
           <div className="modal max-w-md">
@@ -832,8 +905,21 @@ export default function ProjectDetail() {
                 <div className="field">
                   <label className="label">{t('deps.type')}</label>
                   <select className="select" value={newDep.type} onChange={e => setNewDep(d => ({ ...d, type: e.target.value }))}>
-                    {['FS','SS','FF','SF'].map(ty => <option key={ty} value={ty}>{t(`deps.type.${ty}` as any)}</option>)}
+                    <option value="FS">FS — Fin → Début</option>
+                    <option value="SS">SS — Début → Début</option>
+                    <option value="FF">FF — Fin → Fin</option>
+                    <option value="SF">SF — Début → Fin</option>
                   </select>
+                  {(() => {
+                    const info: Record<string, [string, string]> = {
+                      FS: ["B démarre après la fin de A — le plus courant", "bg-slate-50 border-slate-200 text-slate-700"],
+                      SS: ["B démarre en même temps que A", "bg-emerald-50 border-emerald-200 text-emerald-700"],
+                      FF: ["B finit en même temps que A", "bg-orange-50 border-orange-200 text-orange-700"],
+                      SF: ["B finit quand A commence — cas rare", "bg-violet-50 border-violet-200 text-violet-700"],
+                    }
+                    const [desc, cls] = info[newDep.type] ?? []
+                    return desc ? <div className={`mt-2 rounded-lg px-3 py-2 text-xs border ${cls}`}>💡 {desc}</div> : null
+                  })()}
                 </div>
                 <div className="field">
                   <label className="label">{t('deps.successor')}</label>
@@ -946,8 +1032,18 @@ function ProjectEditModal({ project, onClose, onSubmit }: any) {
   const t = useT()
   const { user: modalUser } = useAuth()
   const isMetier = modalUser?.company_type === 'entreprise_metier'
+  const isSuperAdmin = !modalUser?.company_id
   const [lotTypes, setLotTypes] = useState<string[]>(() => parseLotTypes(project.lot_types))
   const [clientId, setClientId] = useState<string | null>(project.client_id || null)
+  const [companies, setCompanies] = useState<{ id: string; name: string }[]>([])
+  const [companyId, setCompanyId] = useState<string>(project.company_id || '')
+
+  useEffect(() => {
+    if (isSuperAdmin) {
+      api.platform.companies().then(setCompanies).catch(() => {})
+    }
+  }, [isSuperAdmin])
+
   const [form, setForm] = useState({
     name: project.name || '',
     reference: project.reference || '',
@@ -984,12 +1080,27 @@ function ProjectEditModal({ project, onClose, onSubmit }: any) {
           budget_ht: form.budget_ht ? Number(form.budget_ht) : null,
           lot_types: lotTypes.length > 0 ? lotTypes : null,
           meeting_time: form.meeting_time || null,
+          company_id: isSuperAdmin ? (companyId || null) : undefined,
         })}>
           <div className="modal-body grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="field sm:col-span-2">
               <label className="label">{t('projects.name')} *</label>
               <input className="input" value={form.name} onChange={e => set('name', e.target.value)} required />
             </div>
+            {isSuperAdmin && (
+              <div className="field sm:col-span-2">
+                <label className="label">🏢 Entreprise propriétaire</label>
+                <select className="select" value={companyId} onChange={e => setCompanyId(e.target.value)}>
+                  <option value="">— Global (aucune entreprise) —</option>
+                  {companies.map(c => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+                <p className="mt-1 text-xs text-gray-400">
+                  Champ visible uniquement en mode superadmin. Les projets "global" sont visibles par toutes les entreprises.
+                </p>
+              </div>
+            )}
             <div className="field">
               <label className="label">{t('projects.reference')}</label>
               <input className="input" value={form.reference} onChange={e => set('reference', e.target.value)} />
@@ -1346,14 +1457,102 @@ function MilestoneModal({ milestone, mode, onClose, onSubmit, onDelete }: any) {
   )
 }
 
+// ─── NewSubModal (création rapide sous-traitant depuis LotModal) ───────────────
+function NewSubModal({ onClose, onCreated }: { onClose: () => void; onCreated: (u: any) => void }) {
+  const [form, setForm] = useState({ first_name: '', last_name: '', company_name: '', trade: '', siret: '' })
+  const [siretStatus, setSiretStatus] = useState<'idle' | 'loading' | 'ok' | 'inactive' | 'error'>('idle')
+  const [saving, setSaving] = useState(false)
+  const [err, setErr] = useState('')
+  const set = (k: string, v: any) => setForm(f => ({ ...f, [k]: v }))
+
+  const doLookup = async () => {
+    if (!form.siret.trim()) return
+    setSiretStatus('loading')
+    const res = await lookupSiret(form.siret)
+    if (!res) { setSiretStatus('error'); return }
+    setForm(f => ({
+      ...f,
+      company_name: res.nom || f.company_name,
+      first_name: res.gerantPrenom || f.first_name,
+      last_name: res.gerantNom || f.last_name,
+      trade: res.metier || f.trade,
+    }))
+    setSiretStatus(res.etat === 'A' ? 'ok' : 'inactive')
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setSaving(true); setErr('')
+    try {
+      const created = await api.users.create({ ...form, user_type: 'subcontractor' })
+      onCreated(created)
+    } catch (ex: any) { setErr(ex.message || 'Erreur'); setSaving(false) }
+  }
+
+  return (
+    <div className="modal-overlay" style={{ zIndex: 1100 }}>
+      <div className="modal" style={{ maxWidth: 420 }}>
+        <div className="modal-header">
+          <h3 className="font-semibold text-sm">＋ Nouveau sous-traitant</h3>
+          <button onClick={onClose}>✕</button>
+        </div>
+        <form onSubmit={handleSubmit}>
+          <div className="modal-body space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div><label className="label text-xs">Prénom *</label>
+                <input className="input" value={form.first_name} onChange={e => set('first_name', e.target.value)} required /></div>
+              <div><label className="label text-xs">Nom *</label>
+                <input className="input" value={form.last_name} onChange={e => set('last_name', e.target.value)} required /></div>
+            </div>
+            {/* SIRET */}
+            <div>
+              <label className="label text-xs">SIRET <span className="text-gray-400 font-normal">(optionnel)</span></label>
+              <div className="flex gap-2">
+                <input className="input flex-1 font-mono text-sm" value={form.siret}
+                  onChange={e => { set('siret', e.target.value); setSiretStatus('idle') }}
+                  placeholder="14 chiffres" maxLength={14} />
+                <button type="button" onClick={doLookup}
+                  disabled={siretStatus === 'loading' || !form.siret.trim()}
+                  className="btn btn-ghost border border-gray-300 px-3 text-sm">
+                  {siretStatus === 'loading' ? '⏳' : '🔍'}
+                </button>
+              </div>
+              {siretStatus === 'ok' && <p className="mt-1 text-xs text-green-600">✅ Entreprise active — champs pré-remplis</p>}
+              {siretStatus === 'inactive' && <p className="mt-1 text-xs text-amber-600">⚠️ Entreprise cessée — champs pré-remplis</p>}
+              {siretStatus === 'error' && <p className="mt-1 text-xs text-red-500">❌ SIRET introuvable dans l'annuaire national</p>}
+            </div>
+            <div>
+              <label className="label text-xs">Entreprise</label>
+              <input className="input" value={form.company_name} onChange={e => set('company_name', e.target.value)} placeholder="MAÇOBAT SARL" />
+            </div>
+            <div>
+              <label className="label text-xs">Métier</label>
+              <input className="input" value={form.trade} onChange={e => set('trade', e.target.value)} placeholder="Maçonnerie, Électricité…" />
+            </div>
+            {err && <p className="text-xs text-red-600">{err}</p>}
+          </div>
+          <div className="modal-footer">
+            <button type="button" onClick={onClose} className="btn btn-ghost btn-sm">Annuler</button>
+            <button type="submit" disabled={saving} className="btn btn-primary btn-sm">
+              {saving ? '⏳' : '＋ Créer'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
 // ─── LotModal ─────────────────────────────────────────────────────────────────
-function LotModal({ lot, mode, users, employees, teams, onClose, onSubmit, t }: any) {
+function LotModal({ lot, mode, users, employees, teams, onClose, onSubmit, onUserCreated, t }: any) {
   // Détecter l'assignation initiale : équipe, salarié ou sous-traitant
   const initialAssignType = lot.team_id ? 'team'
     : lot.subcontractor_id && (employees || []).some((e: any) => e.id === lot.subcontractor_id) ? 'employee'
     : 'subcontractor'
   const [form, setForm] = useState({ ...lot })
+  const [localUsers, setLocalUsers] = useState<any[]>(users || [])
   const [assignType, setAssignType] = useState<'subcontractor' | 'employee' | 'team'>(initialAssignType)
+  const [showNewSub, setShowNewSub] = useState(false)
   const set = (k: string, v: any) => setForm((f: any) => ({ ...f, [k]: v }))
 
   const handleAssignTypeChange = (type: 'subcontractor' | 'employee' | 'team') => {
@@ -1396,10 +1595,33 @@ function LotModal({ lot, mode, users, employees, teams, onClose, onSubmit, t }: 
                 </button>
               </div>
               {assignType === 'subcontractor' ? (
-                <select className="select" value={form.subcontractor_id || ''} onChange={e => set('subcontractor_id', e.target.value)}>
-                  <option value="">{t('common.none')}</option>
-                  {users.map((u: any) => <option key={u.id} value={u.id}>{u.first_name} {u.last_name}{u.company_name ? ` — ${u.company_name}` : ''}</option>)}
-                </select>
+                <>
+                  <select className="select" value={form.subcontractor_id || ''} onChange={e => set('subcontractor_id', e.target.value)}>
+                    <option value="">{t('common.none')}</option>
+                    {localUsers.map((u: any) => (
+                      <option key={u.id} value={u.id}>
+                        {u.first_name} {u.last_name}
+                        {u.trade ? ` (${u.trade})` : ''}
+                        {u.company_name ? ` — ${u.company_name}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                  <button type="button" onClick={() => setShowNewSub(true)}
+                    className="mt-1.5 text-xs text-indigo-600 hover:underline flex items-center gap-1">
+                    ＋ Nouveau sous-traitant
+                  </button>
+                  {showNewSub && (
+                    <NewSubModal
+                      onClose={() => setShowNewSub(false)}
+                      onCreated={(newUser: any) => {
+                        setLocalUsers(prev => [...prev, newUser])
+                        set('subcontractor_id', newUser.id)
+                        onUserCreated?.(newUser)
+                        setShowNewSub(false)
+                      }}
+                    />
+                  )}
+                </>
               ) : assignType === 'employee' ? (
                 <select className="select" value={form.subcontractor_id || ''} onChange={e => set('subcontractor_id', e.target.value)}>
                   <option value="">{t('common.none')}</option>

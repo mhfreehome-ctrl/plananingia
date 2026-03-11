@@ -11,7 +11,8 @@ milestones.get('/projects/:id/milestones', requireAuth, async (c) => {
   const user = c.get('user')
   if (user.company_id) {
     const proj = await c.env.DB.prepare('SELECT company_id FROM projects WHERE id = ?').bind(id).first<any>()
-    if (!proj || proj.company_id !== user.company_id) return c.json({ error: 'Forbidden' }, 403)
+    // company_id NULL = projet modèle global → accessible à tous les admins
+    if (!proj || (proj.company_id !== null && proj.company_id !== user.company_id)) return c.json({ error: 'Forbidden' }, 403)
   }
   const rows = await c.env.DB.prepare(
     'SELECT * FROM milestones WHERE project_id = ? ORDER BY date ASC'
@@ -25,7 +26,8 @@ milestones.post('/projects/:id/milestones', requireAdmin, async (c) => {
   const user = c.get('user')
   if (user.company_id) {
     const proj = await c.env.DB.prepare('SELECT company_id FROM projects WHERE id = ?').bind(id).first<any>()
-    if (!proj || proj.company_id !== user.company_id) return c.json({ error: 'Forbidden' }, 403)
+    // company_id NULL = projet modèle global → accessible à tous les admins
+    if (!proj || (proj.company_id !== null && proj.company_id !== user.company_id)) return c.json({ error: 'Forbidden' }, 403)
   }
   const body = await c.req.json()
   if (!body.name || !body.date) return c.json({ error: 'name and date are required' }, 400)
@@ -44,7 +46,8 @@ milestones.put('/milestones/:id', requireAdmin, async (c) => {
   const ms = await c.env.DB.prepare(
     'SELECT m.id, p.company_id FROM milestones m JOIN projects p ON p.id = m.project_id WHERE m.id = ?'
   ).bind(id).first<any>()
-  if (!ms || (user.company_id && ms.company_id !== user.company_id)) return c.json({ error: 'Forbidden' }, 403)
+  // company_id NULL = projet modèle global → accessible à tous les admins
+  if (!ms || (user.company_id && ms.company_id !== null && ms.company_id !== user.company_id)) return c.json({ error: 'Forbidden' }, 403)
   const body = await c.req.json()
   await c.env.DB.prepare(
     'UPDATE milestones SET name=?, date=?, color=? WHERE id=?'
@@ -60,7 +63,8 @@ milestones.delete('/milestones/:id', requireAdmin, async (c) => {
   const ms = await c.env.DB.prepare(
     'SELECT m.id, p.company_id FROM milestones m JOIN projects p ON p.id = m.project_id WHERE m.id = ?'
   ).bind(id).first<any>()
-  if (!ms || (user.company_id && ms.company_id !== user.company_id)) return c.json({ error: 'Forbidden' }, 403)
+  // company_id NULL = projet modèle global → accessible à tous les admins
+  if (!ms || (user.company_id && ms.company_id !== null && ms.company_id !== user.company_id)) return c.json({ error: 'Forbidden' }, 403)
   await c.env.DB.prepare('DELETE FROM milestones WHERE id = ?').bind(id).run()
   return c.json({ ok: true })
 })

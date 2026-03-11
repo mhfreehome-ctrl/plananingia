@@ -11,8 +11,8 @@ const APP_URL = 'https://www.planningia.com'
 
 const auth = new Hono<{ Bindings: Env }>()
 
-const ACCESS_TTL = 15 * 60          // 15 min (secondes)
-const REFRESH_TTL = 30 * 24 * 3600 // 30 jours (secondes)
+const ACCESS_TTL = 8 * 60 * 60      // 8 heures (était 15 min — trop court, race condition refresh)
+const REFRESH_TTL = 90 * 24 * 3600 // 90 jours (était 30 jours)
 
 // Attributs communs des cookies auth (HttpOnly, cross-origin Secure)
 const COOKIE_BASE = { httpOnly: true, secure: true, sameSite: 'None', path: '/' } as const

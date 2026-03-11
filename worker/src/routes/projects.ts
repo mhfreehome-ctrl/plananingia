@@ -11,35 +11,34 @@ projects.get('/', requireAuth, async (c) => {
   if (user.role === 'admin') {
     if (user.company_id) {
       if (user.access_level === 'conducteur' || user.access_level === 'salarie') {
-        // Conducteur / Salarié : uniquement les projets où ils sont impliqués
+        // Conducteur / Salarié : uniquement les projets de leur entreprise où ils sont impliqués
         rows = await c.env.DB.prepare(`
           SELECT DISTINCT p.*, u.first_name || ' ' || u.last_name as creator_name,
             (SELECT COUNT(*) FROM lots l WHERE l.project_id = p.id) as lot_count,
             (SELECT COALESCE(ROUND(AVG(NULLIF(l.progress_percent, 0))), 0) FROM lots l WHERE l.project_id = p.id) as avg_progress,
           (SELECT COUNT(*) FROM projects sp WHERE sp.parent_project_id = p.id) as sub_projects_count
           FROM projects p LEFT JOIN users u ON u.id = p.created_by
-          WHERE (p.company_id = ? OR p.company_id IS NULL)
+          WHERE p.company_id = ?
           AND (
-            p.company_id IS NULL
-            OR p.created_by = ?
+            p.created_by = ?
             OR EXISTS (SELECT 1 FROM lots l WHERE l.project_id = p.id AND l.subcontractor_id = ?)
             OR EXISTS (
               SELECT 1 FROM lots l JOIN team_members tm ON tm.team_id = l.team_id
               WHERE l.project_id = p.id AND tm.user_id = ?
             )
           )
-          ORDER BY p.company_id IS NULL DESC, p.updated_at DESC
+          ORDER BY p.updated_at DESC
         `).bind(user.company_id, user.sub, user.sub, user.sub).all()
       } else {
-      // Admin / Editeur avec company_id : voir ses projets + modèles globaux (company_id IS NULL)
+      // Admin / Editeur avec company_id : voir UNIQUEMENT ses propres projets (isolation stricte)
       rows = await c.env.DB.prepare(`
         SELECT p.*, u.first_name || ' ' || u.last_name as creator_name,
           (SELECT COUNT(*) FROM lots l WHERE l.project_id = p.id) as lot_count,
           (SELECT COALESCE(ROUND(AVG(NULLIF(l.progress_percent, 0))), 0) FROM lots l WHERE l.project_id = p.id) as avg_progress,
           (SELECT COUNT(*) FROM projects sp WHERE sp.parent_project_id = p.id) as sub_projects_count
         FROM projects p LEFT JOIN users u ON u.id = p.created_by
-        WHERE (p.company_id = ? OR p.company_id IS NULL)
-        ORDER BY p.company_id IS NULL DESC, p.updated_at DESC
+        WHERE p.company_id = ?
+        ORDER BY p.updated_at DESC
       `).bind(user.company_id).all()
       }
     } else {
@@ -138,17 +137,22 @@ projects.put('/:id', requireWrite, async (c) => {
     ? (Array.isArray(body.lot_types) ? JSON.stringify(body.lot_types) : body.lot_types)
     : null
 
+  // Seul un superadmin (sans company_id) peut changer l'entreprise propriétaire d'un projet
+  const newCompanyId = (!user.company_id && body.company_id !== undefined)
+    ? (body.company_id || null)
+    : proj.company_id
+
   await c.env.DB.prepare(`
     UPDATE projects SET name=?, reference=?, address=?, city=?, postal_code=?, client_name=?,
       client_email=?, client_phone=?, client_id=?, description=?, start_date=?, duration_weeks=?, budget_ht=?,
-      status=?, lot_types=?, meeting_time=?, project_type=?, updated_at=datetime('now')
+      status=?, lot_types=?, meeting_time=?, project_type=?, company_id=?, updated_at=datetime('now')
     WHERE id=?
   `).bind(body.name, body.reference || null, body.address || null, body.city || null, body.postal_code || null,
     body.client_name || null, body.client_email || null, body.client_phone || null,
     body.client_id || null,
     body.description || null, body.start_date || null, body.duration_weeks || null,
     body.budget_ht || null, body.status || 'draft', lotTypesValue,
-    body.meeting_time || null, body.project_type || 'standalone', id).run()
+    body.meeting_time || null, body.project_type || 'standalone', newCompanyId, id).run()
 
   return c.json({ ok: true })
 })
@@ -176,7 +180,8 @@ projects.post('/:id/duplicate', requireWrite, async (c) => {
   const user = c.get('user')
   if (user.company_id) {
     const proj = await c.env.DB.prepare('SELECT company_id FROM projects WHERE id = ?').bind(id).first<any>()
-    if (!proj || proj.company_id !== user.company_id) return c.json({ error: 'Forbidden' }, 403)
+    // company_id NULL = projet modèle global → duplicable par tous les admins
+    if (!proj || (proj.company_id !== null && proj.company_id !== user.company_id)) return c.json({ error: 'Forbidden' }, 403)
   }
   const src = await c.env.DB.prepare('SELECT * FROM projects WHERE id = ?').bind(id).first<any>()
   if (!src) return c.json({ error: 'Not found' }, 404)
@@ -244,7 +249,8 @@ projects.get('/:id/stats', requireAuth, async (c) => {
   // Vérif isolation company
   if (user.company_id) {
     const proj = await c.env.DB.prepare('SELECT company_id FROM projects WHERE id = ?').bind(id).first<any>()
-    if (!proj || proj.company_id !== user.company_id) return c.json({ error: 'Forbidden' }, 403)
+    // company_id NULL = projet modèle global → stats accessibles à tous les admins
+    if (!proj || (proj.company_id !== null && proj.company_id !== user.company_id)) return c.json({ error: 'Forbidden' }, 403)
   }
   const lots = await c.env.DB.prepare('SELECT status, progress_percent, is_critical FROM lots WHERE project_id = ?').bind(id).all()
   const rows = lots.results as any[]
