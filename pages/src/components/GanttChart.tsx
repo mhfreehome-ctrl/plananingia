@@ -694,6 +694,10 @@ export default function GanttChart({ lots, deps, projectStartDate, lang = 'fr', 
               <svg width="20" height="12"><line x1="10" y1="0" x2="10" y2="12" stroke="#f97316" strokeWidth="1.5" strokeDasharray="3 2" /><polygon points="10,6 6,12 14,12" fill="#f97316" /></svg>
               <span className="hidden sm:inline">Échéance</span>
             </span>
+            <span className="flex items-center gap-1">
+              <svg width="20" height="12"><line x1="10" y1="0" x2="10" y2="12" stroke="#ef4444" strokeWidth="2" /><rect x="3" y="0" width="14" height="5" rx="1" fill="#ef4444" /></svg>
+              <span className="hidden sm:inline">Aujourd'hui</span>
+            </span>
           </div>
         </div>
       </div>
@@ -799,6 +803,27 @@ export default function GanttChart({ lots, deps, projectStartDate, lang = 'fr', 
 
               {/* Dependency arrows */}
               <svg ref={svgRef} style={{ position: 'absolute', top: 0, left: 0, width: totalW, height: totalH, pointerEvents: 'none', overflow: 'visible' }}>
+                {/* ── Trait vertical "Aujourd'hui" ── */}
+                {(() => {
+                  const todayISO = new Date().toISOString().slice(0, 10)
+                  const todayOffset = daysBetween(startDate, todayISO)
+                  if (todayOffset < 0 || todayOffset > totalDays + 14) return null
+                  const tx = dayToX(todayOffset)
+                  return (
+                    <g style={{ pointerEvents: 'none' }}>
+                      {/* Ligne rouge verticale pleine hauteur */}
+                      <line x1={tx} y1={0} x2={tx} y2={totalH}
+                        stroke="#ef4444" strokeWidth="1.5" opacity="0.75" />
+                      {/* Badge "Aujourd'hui" dans la zone header (y négatif → overflow:visible) */}
+                      <rect x={tx - 31} y={-19} width={62} height={17} rx={3}
+                        fill="#ef4444" opacity="0.92" />
+                      <text x={tx} y={-6} textAnchor="middle" fill="white"
+                        fontSize="9" fontWeight="700" style={{ userSelect: 'none' }}>
+                        Aujourd'hui
+                      </text>
+                    </g>
+                  )
+                })()}
                 {deps.map(d => {
                   const from = lotMap[d.predecessor_id]
                   const to = lotMap[d.successor_id]
