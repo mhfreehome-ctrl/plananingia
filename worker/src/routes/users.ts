@@ -1,9 +1,77 @@
 import { Hono } from 'hono'
 import { requireAdmin, requireFullAdmin } from '../middleware/auth'
-import { hashPassword } from '../utils/crypto'
+import { hashPassword, generateId } from '../utils/crypto'
 import type { Env } from '../types'
 
 const users = new Hono<{ Bindings: Env }>()
+
+// POST /api/users — Créer un sous-traitant ou salarié (admin ou éditeur)
+users.post('/', requireAdmin, async (c) => {
+  const admin = c.get('user')
+  const body = await c.req.json()
+  const { first_name, last_name, email, phone, company_name, trade, siret, user_type } = body
+  const id = generateId('usr')
+  // Email optionnel : si absent → placeholder non-connectable
+  const effectiveEmail = email?.trim()
+    ? email.trim().toLowerCase()
+    : `noemail_${id}@noemail.internal`
+  try {
+    await c.env.DB.prepare(`
+      INSERT INTO users (id, email, password_hash, role, user_type,
+        first_name, last_name, company_name, phone, trade, siret, company_id, is_active)
+      VALUES (?, ?, '', 'subcontractor', ?, ?, ?, ?, ?, ?, ?, ?, 1)
+    `).bind(
+      id, effectiveEmail,
+      user_type ?? 'subcontractor',
+      first_name ?? '', last_name ?? '',
+      company_name ?? '', phone ?? '',
+      trade ?? '', siret ?? '',
+      admin.company_id ?? null
+    ).run()
+  } catch (e: any) {
+    if (e?.message?.includes('UNIQUE constraint')) {
+      return c.json({ error: 'Un utilisateur avec cet email existe déjà' }, 409)
+    }
+    throw e
+  }
+  return c.json({ id, email: effectiveEmail, first_name, last_name, company_name, trade, siret, user_type: user_type ?? 'subcontractor' }, 201)
+})
+
+// POST /api/users/import — Import en masse depuis Excel (array JSON)
+users.post('/import', requireAdmin, async (c) => {
+  const admin = c.get('user')
+  const { rows } = await c.req.json<{ rows: any[] }>()
+  if (!Array.isArray(rows)) return c.json({ error: 'rows must be an array' }, 400)
+  let created = 0, skipped = 0
+  for (const row of rows.slice(0, 200)) {
+    const id = generateId('usr')
+    const rawEmail = (row.email ?? row.Email ?? '').toString().trim()
+    const effectiveEmail = rawEmail ? rawEmail.toLowerCase() : `noemail_${id}@noemail.internal`
+    const ut = (row.type ?? row.Type ?? 'sous-traitant').toString().toLowerCase()
+    const userType = ut === 'salarié' || ut === 'salarie' || ut === 'employee' ? 'employee' : 'subcontractor'
+    try {
+      const res = await c.env.DB.prepare(`
+        INSERT INTO users (id, email, password_hash, role, user_type,
+          first_name, last_name, company_name, phone, trade, siret, company_id, is_active)
+        VALUES (?, ?, '', 'subcontractor', ?, ?, ?, ?, ?, ?, ?, ?, 1)
+        ON CONFLICT(email) DO NOTHING
+      `).bind(
+        id, effectiveEmail, userType,
+        (row.prenom ?? row.Prénom ?? row.Prenom ?? '').toString().trim(),
+        (row.nom ?? row.Nom ?? '').toString().trim(),
+        (row.entreprise ?? row.Entreprise ?? row['Entreprise / Raison sociale'] ?? '').toString().trim(),
+        (row.telephone ?? row.Téléphone ?? row.Telephone ?? '').toString().trim(),
+        (row.metier ?? row.Métier ?? row.Metier ?? '').toString().trim(),
+        (row.siret ?? row.SIRET ?? '').toString().trim(),
+        admin.company_id ?? null
+      ).run()
+      res.meta.changes > 0 ? created++ : skipped++
+    } catch {
+      skipped++
+    }
+  }
+  return c.json({ created, skipped })
+})
 
 users.get('/', requireAdmin, async (c) => {
   const user = c.get('user')
@@ -11,12 +79,12 @@ users.get('/', requireAdmin, async (c) => {
   if (user.company_id) {
     // Filtrer par company_id : l'admin ne voit que son entreprise
     rows = await c.env.DB.prepare(
-      'SELECT id, email, role, user_type, access_level, first_name, last_name, company_name, phone, lang, is_active, created_at FROM users WHERE company_id = ? ORDER BY role, user_type, created_at DESC'
+      'SELECT id, email, role, user_type, access_level, first_name, last_name, company_name, phone, lang, trade, siret, is_active, created_at FROM users WHERE company_id = ? ORDER BY role, user_type, last_name, first_name'
     ).bind(user.company_id).all()
   } else {
     // Admin sans company_id (comptes démo) : voir tous
     rows = await c.env.DB.prepare(
-      'SELECT id, email, role, user_type, access_level, first_name, last_name, company_name, phone, lang, is_active, created_at FROM users ORDER BY role, user_type, created_at DESC'
+      'SELECT id, email, role, user_type, access_level, first_name, last_name, company_name, phone, lang, trade, siret, is_active, created_at FROM users ORDER BY role, user_type, last_name, first_name'
     ).all()
   }
   return c.json(rows.results)
@@ -26,7 +94,7 @@ users.get('/:id', requireAdmin, async (c) => {
   const { id } = c.req.param()
   const user = c.get('user')
   const u = await c.env.DB.prepare(
-    'SELECT id, email, role, user_type, access_level, first_name, last_name, company_name, phone, lang, is_active, created_at, company_id FROM users WHERE id = ?'
+    'SELECT id, email, role, user_type, access_level, first_name, last_name, company_name, phone, lang, trade, siret, is_active, created_at, company_id FROM users WHERE id = ?'
   ).bind(id).first<any>()
   if (!u) return c.json({ error: 'Not found' }, 404)
   // Vérif isolation company
@@ -45,7 +113,7 @@ users.put('/:id', requireFullAdmin, async (c) => {
   }
   const body = await c.req.json()
   await c.env.DB.prepare(
-    `UPDATE users SET first_name=?, last_name=?, email=?, company_name=?, phone=?, lang=?, user_type=?, access_level=?, updated_at=datetime('now') WHERE id=?`
+    `UPDATE users SET first_name=?, last_name=?, email=?, company_name=?, phone=?, lang=?, user_type=?, access_level=?, trade=?, siret=?, updated_at=datetime('now') WHERE id=?`
   ).bind(
     body.first_name || null,
     body.last_name || null,
@@ -55,10 +123,12 @@ users.put('/:id', requireFullAdmin, async (c) => {
     body.lang || 'fr',
     body.user_type || 'subcontractor',
     body.access_level || 'editeur',
+    body.trade || null,
+    body.siret || null,
     id
   ).run()
   const u = await c.env.DB.prepare(
-    'SELECT id, email, role, user_type, access_level, first_name, last_name, company_name, phone, lang, is_active, created_at FROM users WHERE id = ?'
+    'SELECT id, email, role, user_type, access_level, first_name, last_name, company_name, phone, lang, trade, siret, is_active, created_at FROM users WHERE id = ?'
   ).bind(id).first()
   return c.json(u)
 })

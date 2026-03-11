@@ -2,6 +2,32 @@
 const BASE = import.meta.env.VITE_API_BASE ||
   (import.meta.env.PROD ? 'https://planningai-api.mhfreehome.workers.dev/api' : '/api')
 
+// ── Singleton refresh — évite la race condition quand plusieurs requêtes
+// ── reçoivent 401 simultanément (ex: chargement d'une page avec N appels API)
+// ── Sans ce guard, chacune lancerait son propre /auth/refresh en parallèle,
+// ── le 1er réussit et invalide le token rotatif, les suivants échouent → logout.
+let _refreshPromise: Promise<string | null> | null = null
+
+function doRefresh(): Promise<string | null> {
+  if (!_refreshPromise) {
+    _refreshPromise = (async () => {
+      const refreshToken = localStorage.getItem('refresh_token')
+      const r = await fetch(`${BASE}/auth/refresh`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: refreshToken ? JSON.stringify({ refresh_token: refreshToken }) : undefined,
+      })
+      if (!r.ok) return null
+      const data = await r.json() as any
+      if (data.access_token) localStorage.setItem('access_token', data.access_token)
+      if (data.refresh_token) localStorage.setItem('refresh_token', data.refresh_token)
+      return data.access_token as string || null
+    })().finally(() => { _refreshPromise = null })
+  }
+  return _refreshPromise
+}
+
 async function req<T>(method: string, path: string, body?: unknown): Promise<T> {
   const token = localStorage.getItem('access_token')
 
@@ -16,37 +42,27 @@ async function req<T>(method: string, path: string, body?: unknown): Promise<T> 
   })
 
   if (res.status === 401) {
-    // Tentative de refresh silencieux — localStorage refresh_token + cookie fallback
-    const refreshToken = localStorage.getItem('refresh_token')
-    const r = await fetch(`${BASE}/auth/refresh`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: refreshToken ? JSON.stringify({ refresh_token: refreshToken }) : undefined,
-    })
-    if (r.ok) {
-      const refreshData = await r.json() as any
-      if (refreshData.access_token) localStorage.setItem('access_token', refreshData.access_token)
-      if (refreshData.refresh_token) localStorage.setItem('refresh_token', refreshData.refresh_token)
-      const newToken = refreshData.access_token || localStorage.getItem('access_token')
-      // Retry la requête originale avec le nouveau token
-      const res2 = await fetch(`${BASE}${path}`, {
-        method,
-        headers: {
-          'Content-Type': 'application/json',
-          ...(newToken ? { 'Authorization': `Bearer ${newToken}` } : {}),
-        },
-        credentials: 'include',
-        body: body ? JSON.stringify(body) : undefined,
-      })
-      if (!res2.ok) throw new Error(await res2.text())
-      return res2.json() as Promise<T>
+    // Toutes les requêtes concurrentes en 401 attendent le MÊME refresh
+    const newToken = await doRefresh()
+    if (!newToken) {
+      // Refresh échoué — nettoyer et rediriger login (garde anti-boucle)
+      localStorage.removeItem('access_token')
+      localStorage.removeItem('refresh_token')
+      if (window.location.pathname !== '/login') window.location.href = '/login'
+      throw new Error('Unauthorized')
     }
-    // Refresh échoué — nettoyer et rediriger login (garde anti-boucle)
-    localStorage.removeItem('access_token')
-    localStorage.removeItem('refresh_token')
-    if (window.location.pathname !== '/login') window.location.href = '/login'
-    throw new Error('Unauthorized')
+    // Retry la requête originale avec le nouveau token
+    const res2 = await fetch(`${BASE}${path}`, {
+      method,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${newToken}`,
+      },
+      credentials: 'include',
+      body: body ? JSON.stringify(body) : undefined,
+    })
+    if (!res2.ok) throw new Error(await res2.text())
+    return res2.json() as Promise<T>
   }
 
   if (!res.ok) {
@@ -121,6 +137,8 @@ export const api = {
   },
   users: {
     list: () => get<any[]>('/users'),
+    create: (data: any) => post<any>('/users', data),
+    import: (rows: any[]) => post<any>('/users/import', { rows }),
     update: (id: string, data: any) => put<any>(`/users/${id}`, data),
     delete: (id: string) => del(`/users/${id}`),
     lots: (id: string) => get<any[]>(`/users/${id}/lots`),

@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useAuth } from '../store/auth'
 import { useT } from '../i18n'
 import { api } from '../api/client'
+import { lookupSiret } from '../lib/siretLookup'
 
 const COMPANY_TYPES = ['entreprise_generale', 'maitre_oeuvre', 'promoteur', 'entreprise_metier']
 
@@ -135,6 +136,116 @@ function CoModal({ company, onClose, onSave, saving, error }: {
   )
 }
 
+// ── Modal : ajouter un sous-traitant / salarié ──────────────────────────────
+function AddSubModal({ onClose, onCreated }: { onClose: () => void; onCreated: (u: any) => void }) {
+  const [form, setForm] = useState({
+    first_name: '', last_name: '', user_type: 'subcontractor',
+    company_name: '', trade: '', siret: '', phone: '', email: '',
+  })
+  const [siretStatus, setSiretStatus] = useState<'idle' | 'loading' | 'ok' | 'inactive' | 'error'>('idle')
+  const [siretInfo, setSiretInfo] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [err, setErr] = useState('')
+  const set = (k: string, v: any) => setForm(f => ({ ...f, [k]: v }))
+
+  const doLookup = async () => {
+    if (!form.siret.trim()) return
+    setSiretStatus('loading'); setSiretInfo('')
+    const res = await lookupSiret(form.siret)
+    if (!res) { setSiretStatus('error'); return }
+    setForm(f => ({ ...f, company_name: res.nom || f.company_name }))
+    setSiretStatus(res.etat === 'A' ? 'ok' : 'inactive')
+    setSiretInfo(res.activite ? `${res.activite}${res.adresse ? ' · ' + res.adresse : ''}` : '')
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault(); setSaving(true); setErr('')
+    try {
+      const created = await api.users.create(form)
+      onCreated(created)
+    } catch (ex: any) { setErr(ex.message || 'Erreur'); setSaving(false) }
+  }
+
+  return (
+    <div className="modal-overlay">
+      <div className="modal" style={{ maxWidth: 500 }}>
+        <div className="modal-header">
+          <h3 className="font-semibold">Nouveau sous-traitant / collaborateur</h3>
+          <button onClick={onClose}>✕</button>
+        </div>
+        <form onSubmit={handleSubmit}>
+          <div className="modal-body space-y-4">
+            {/* Prénom / Nom */}
+            <div className="grid grid-cols-2 gap-3">
+              <div><label className="label">Prénom *</label>
+                <input className="input" value={form.first_name} onChange={e => set('first_name', e.target.value)} required /></div>
+              <div><label className="label">Nom *</label>
+                <input className="input" value={form.last_name} onChange={e => set('last_name', e.target.value)} required /></div>
+            </div>
+            {/* Type */}
+            <div>
+              <label className="label">Type</label>
+              <div className="flex gap-2">
+                {(['subcontractor', 'employee'] as const).map(t => (
+                  <button key={t} type="button" onClick={() => set('user_type', t)}
+                    className={`btn btn-sm flex-1 ${form.user_type === t ? 'btn-primary' : 'btn-ghost border border-gray-200'}`}>
+                    {t === 'subcontractor' ? '🏢 Sous-traitant' : '👷 Salarié'}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {/* SIRET + lookup */}
+            <div>
+              <label className="label">N° SIRET <span className="text-gray-400 font-normal">(optionnel)</span></label>
+              <div className="flex gap-2">
+                <input className="input flex-1 font-mono" value={form.siret}
+                  onChange={e => { set('siret', e.target.value); setSiretStatus('idle') }}
+                  placeholder="88216048400015" maxLength={14} />
+                <button type="button" onClick={doLookup}
+                  disabled={siretStatus === 'loading' || !form.siret.trim()}
+                  className="btn btn-ghost border border-gray-300 px-3 text-sm min-w-[44px]">
+                  {siretStatus === 'loading' ? '⏳' : '🔍'}
+                </button>
+              </div>
+              {siretStatus === 'ok' && <p className="mt-1 text-xs text-green-600">✅ Entreprise active{siretInfo ? ` — ${siretInfo}` : ''}</p>}
+              {siretStatus === 'inactive' && <p className="mt-1 text-xs text-amber-600">⚠️ Entreprise cessée{siretInfo ? ` — ${siretInfo}` : ''}</p>}
+              {siretStatus === 'error' && <p className="mt-1 text-xs text-red-500">❌ SIRET introuvable dans l'annuaire national</p>}
+            </div>
+            {/* Entreprise + Métier */}
+            <div>
+              <label className="label">Entreprise / Raison sociale</label>
+              <input className="input" value={form.company_name} onChange={e => set('company_name', e.target.value)} placeholder="MAÇOBAT SARL" />
+            </div>
+            <div>
+              <label className="label">Métier / Corps de métier</label>
+              <input className="input" value={form.trade} onChange={e => set('trade', e.target.value)} placeholder="Maçonnerie, Plomberie, Électricité…" />
+            </div>
+            {/* Téléphone + Email */}
+            <div className="grid grid-cols-2 gap-3">
+              <div><label className="label">Téléphone</label>
+                <input className="input" value={form.phone} onChange={e => set('phone', e.target.value)} /></div>
+              <div><label className="label">Email <span className="text-gray-400 font-normal">(accès web)</span></label>
+                <input type="email" className="input" value={form.email} onChange={e => set('email', e.target.value)} placeholder="jean@exemple.fr" /></div>
+            </div>
+            {!form.email.trim() && (
+              <p className="text-xs text-gray-400 bg-gray-50 rounded p-2">
+                💡 Sans email, le collaborateur apparaît dans vos listes mais ne peut pas se connecter. Vous pourrez lui envoyer une invitation plus tard.
+              </p>
+            )}
+            {err && <p className="text-sm text-red-600">{err}</p>}
+          </div>
+          <div className="modal-footer">
+            <button type="button" onClick={onClose} className="btn btn-ghost">Annuler</button>
+            <button type="submit" disabled={saving} className="btn btn-primary">
+              {saving ? '⏳ Création…' : '＋ Créer'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
 export default function Company() {
   const { user } = useAuth()
   const t = useT()
@@ -159,6 +270,15 @@ export default function Company() {
   const [modal, setModal] = useState<any>(null) // null = fermé, false = création, obj = édition
   const [coSaving, setCoSaving] = useState(false)
   const [coError, setCoError] = useState('')
+
+  // ── État sous-traitants & import ────────────────────────────────────────
+  const [subs, setSubs] = useState<any[]>([])
+  const [showAddSub, setShowAddSub] = useState(false)
+  const [importRows, setImportRows] = useState<any[]>([])
+  const [importPreview, setImportPreview] = useState<any[] | null>(null)
+  const [importing, setImporting] = useState(false)
+  const [importResult, setImportResult] = useState<{ created: number; skipped: number } | null>(null)
+  const importInputRef = useRef<HTMLInputElement>(null)
 
   const set = (k: string, v: any) => setForm(f => ({ ...f, [k]: v }))
 
@@ -203,6 +323,15 @@ export default function Company() {
       })
   }, [user?.company_id, isSuperAdmin])
 
+  // ── Chargement liste sous-traitants ──────────────────────────────────────
+  useEffect(() => {
+    if (!isSuperAdmin && user?.company_id) {
+      api.users.list().then(all => {
+        setSubs(all.filter((u: any) => u.user_type === 'subcontractor' || u.user_type === 'employee'))
+      }).catch(() => {/* silencieux */})
+    }
+  }, [user?.company_id, isSuperAdmin])
+
   // ── Submit régulier ──────────────────────────────────────────────────────
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -245,6 +374,56 @@ export default function Company() {
       setCoError(e.message || t('common.error'))
     } finally {
       setCoSaving(false)
+    }
+  }
+
+  // ── Téléchargement template Excel ────────────────────────────────────────
+  const downloadTemplate = async () => {
+    const { utils, write } = await import('xlsx')
+    const ws = utils.aoa_to_sheet([
+      ['Prénom', 'Nom', 'Email (optionnel)', 'Téléphone', 'Entreprise / Raison sociale', 'SIRET (optionnel)', 'Métier', 'Type (sous-traitant / salarié)'],
+      ['Jean', 'Dupont', 'jean.dupont@exemple.fr', '06 12 34 56 78', 'MAÇOBAT SARL', '88216048400015', 'Maçonnerie', 'sous-traitant'],
+      ['Marie', 'Martin', '', '07 98 76 54 32', '', '', 'Peinture', 'salarié'],
+    ])
+    const wb = utils.book_new()
+    utils.book_append_sheet(wb, ws, 'Collaborateurs')
+    const buf = write(wb, { type: 'array', bookType: 'xlsx' })
+    const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url; a.download = 'template_collaborateurs.xlsx'; a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  // ── Import fichier Excel ──────────────────────────────────────────────────
+  const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const { read, utils } = await import('xlsx')
+    const data = await file.arrayBuffer()
+    const wb = read(data)
+    const ws = wb.Sheets[wb.SheetNames[0]]
+    const rows = utils.sheet_to_json(ws, { defval: '' }) as any[]
+    setImportRows(rows)
+    setImportPreview(rows.slice(0, 10))
+    setImportResult(null)
+    e.target.value = ''
+  }
+
+  const confirmImport = async () => {
+    if (!importRows.length) return
+    setImporting(true)
+    try {
+      const result = await api.users.import(importRows)
+      setImportResult(result)
+      setImportPreview(null)
+      setImportRows([])
+      const all = await api.users.list()
+      setSubs(all.filter((u: any) => u.user_type === 'subcontractor' || u.user_type === 'employee'))
+    } catch {
+      setImportResult({ created: 0, skipped: importRows.length })
+    } finally {
+      setImporting(false)
     }
   }
 
@@ -419,6 +598,146 @@ export default function Company() {
           </button>
         </div>
       </form>
+
+      {/* ── Section sous-traitants & collaborateurs ── */}
+      {!isCreating && (
+        <div className="mt-8">
+          {/* En-tête */}
+          <div className="flex items-center justify-between gap-3 flex-wrap mb-4">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900">👷 Sous-traitants &amp; Collaborateurs</h2>
+              <p className="text-xs text-gray-500 mt-0.5">{subs.length} collaborateur{subs.length !== 1 ? 's' : ''} enregistré{subs.length !== 1 ? 's' : ''}</p>
+            </div>
+            <div className="flex gap-2 flex-wrap">
+              <button onClick={downloadTemplate} className="btn btn-ghost btn-sm text-xs border border-gray-200">
+                📥 Template Excel
+              </button>
+              <button onClick={() => importInputRef.current?.click()} className="btn btn-ghost btn-sm text-xs border border-gray-200">
+                📤 Importer
+              </button>
+              <input
+                ref={importInputRef}
+                type="file"
+                accept=".xlsx,.xls,.csv"
+                className="hidden"
+                onChange={handleImportFile}
+              />
+              <button onClick={() => setShowAddSub(true)} className="btn btn-primary btn-sm text-xs">
+                ＋ Ajouter
+              </button>
+            </div>
+          </div>
+
+          {/* Résultat import */}
+          {importResult && (
+            <div className={`mb-3 px-3 py-2 rounded text-sm ${importResult.created > 0 ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-amber-50 text-amber-700 border border-amber-200'}`}>
+              {importResult.created > 0
+                ? `✅ Import réussi : ${importResult.created} créé${importResult.created > 1 ? 's' : ''}${importResult.skipped > 0 ? `, ${importResult.skipped} ignoré${importResult.skipped > 1 ? 's' : ''} (doublons)` : ''}`
+                : `⚠️ Aucune ligne importée (${importResult.skipped} ignorée${importResult.skipped > 1 ? 's' : ''})`}
+              <button onClick={() => setImportResult(null)} className="ml-2 text-gray-400 hover:text-gray-600">✕</button>
+            </div>
+          )}
+
+          {/* Prévisualisation import */}
+          {importPreview && (
+            <div className="mb-4 border border-indigo-200 rounded-lg overflow-hidden bg-indigo-50">
+              <div className="px-3 py-2 flex items-center justify-between bg-indigo-100 border-b border-indigo-200">
+                <span className="text-sm font-medium text-indigo-800">
+                  Aperçu : {importRows.length} ligne{importRows.length > 1 ? 's' : ''} détectée{importRows.length > 1 ? 's' : ''}
+                  {importRows.length > 10 ? ` (10 premières affichées)` : ''}
+                </span>
+                <div className="flex gap-2">
+                  <button onClick={() => { setImportPreview(null); setImportRows([]) }} className="btn btn-ghost btn-sm text-xs">
+                    Annuler
+                  </button>
+                  <button onClick={confirmImport} disabled={importing} className="btn btn-primary btn-sm text-xs">
+                    {importing ? '⏳ Import…' : `✓ Confirmer l'import`}
+                  </button>
+                </div>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="table text-xs">
+                  <thead>
+                    <tr>
+                      {Object.keys(importPreview[0] || {}).slice(0, 8).map(k => (
+                        <th key={k} className="text-xs">{k}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {importPreview.map((row, i) => (
+                      <tr key={i}>
+                        {Object.values(row).slice(0, 8).map((v: any, j) => (
+                          <td key={j} className="text-xs text-gray-600">{String(v) || '—'}</td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* Liste sous-traitants */}
+          {subs.length === 0 ? (
+            <div className="text-center py-10 text-gray-400 border border-dashed border-gray-200 rounded-lg">
+              <div className="text-3xl mb-2">👷</div>
+              <p className="text-sm">Aucun collaborateur enregistré</p>
+              <p className="text-xs mt-1">Ajoutez des sous-traitants ou importez un fichier Excel</p>
+            </div>
+          ) : (
+            <div className="card overflow-hidden">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Nom</th>
+                    <th>Entreprise</th>
+                    <th>Métier</th>
+                    <th>SIRET</th>
+                    <th>Type</th>
+                    <th>Contact</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {subs.map(s => (
+                    <tr key={s.id} className="hover:bg-gray-50">
+                      <td className="font-medium text-gray-900">
+                        {[s.first_name, s.last_name].filter(Boolean).join(' ') || '—'}
+                      </td>
+                      <td className="text-gray-600 text-sm">{s.company_name || '—'}</td>
+                      <td className="text-gray-500 text-sm">{s.trade || '—'}</td>
+                      <td className="text-gray-400 text-xs font-mono">{s.siret || '—'}</td>
+                      <td>
+                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
+                          s.user_type === 'employee'
+                            ? 'bg-green-100 text-green-700'
+                            : 'bg-blue-100 text-blue-700'
+                        }`}>
+                          {s.user_type === 'employee' ? '👷 Salarié' : '🏢 Sous-traitant'}
+                        </span>
+                      </td>
+                      <td className="text-gray-400 text-xs">
+                        {s.email && !s.email.startsWith('noemail_') ? s.email : s.phone || '—'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Modal ajout sous-traitant ── */}
+      {showAddSub && (
+        <AddSubModal
+          onClose={() => setShowAddSub(false)}
+          onCreated={(newUser) => {
+            setSubs(prev => [...prev, newUser])
+            setShowAddSub(false)
+          }}
+        />
+      )}
     </div>
   )
 }

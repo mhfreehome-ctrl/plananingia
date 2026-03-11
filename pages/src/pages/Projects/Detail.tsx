@@ -6,6 +6,7 @@ import { useAuth } from '../../store/auth'
 import GanttChart from '../../components/GanttChart'
 import ProgressModal from '../../components/ProgressModal'
 import ClientSelect from '../../components/ClientSelect'
+import { lookupSiret } from '../../lib/siretLookup'
 
 type Tab = 'gantt' | 'lots' | 'deps' | 'subprojects'
 
@@ -768,7 +769,7 @@ export default function ProjectDetail() {
       )}
 
       {/* Lot modal */}
-      {lotModal && <LotModal lot={lotModal.lot} mode={lotModal.mode} users={users} employees={employees} teams={teams} onClose={() => setLotModal(null)} onSubmit={handleSaveLot} t={t} />}
+      {lotModal && <LotModal lot={lotModal.lot} mode={lotModal.mode} users={users} employees={employees} teams={teams} onClose={() => setLotModal(null)} onSubmit={handleSaveLot} onUserCreated={(u: any) => setUsers(prev => [...prev, u])} t={t} />}
 
       {/* Catalog modal */}
       {catalogModal && (
@@ -1456,14 +1457,96 @@ function MilestoneModal({ milestone, mode, onClose, onSubmit, onDelete }: any) {
   )
 }
 
+// ─── NewSubModal (création rapide sous-traitant depuis LotModal) ───────────────
+function NewSubModal({ onClose, onCreated }: { onClose: () => void; onCreated: (u: any) => void }) {
+  const [form, setForm] = useState({ first_name: '', last_name: '', company_name: '', trade: '', siret: '' })
+  const [siretStatus, setSiretStatus] = useState<'idle' | 'loading' | 'ok' | 'inactive' | 'error'>('idle')
+  const [saving, setSaving] = useState(false)
+  const [err, setErr] = useState('')
+  const set = (k: string, v: any) => setForm(f => ({ ...f, [k]: v }))
+
+  const doLookup = async () => {
+    if (!form.siret.trim()) return
+    setSiretStatus('loading')
+    const res = await lookupSiret(form.siret)
+    if (!res) { setSiretStatus('error'); return }
+    setForm(f => ({ ...f, company_name: res.nom || f.company_name }))
+    setSiretStatus(res.etat === 'A' ? 'ok' : 'inactive')
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setSaving(true); setErr('')
+    try {
+      const created = await api.users.create({ ...form, user_type: 'subcontractor' })
+      onCreated(created)
+    } catch (ex: any) { setErr(ex.message || 'Erreur'); setSaving(false) }
+  }
+
+  return (
+    <div className="modal-overlay" style={{ zIndex: 1100 }}>
+      <div className="modal" style={{ maxWidth: 420 }}>
+        <div className="modal-header">
+          <h3 className="font-semibold text-sm">＋ Nouveau sous-traitant</h3>
+          <button onClick={onClose}>✕</button>
+        </div>
+        <form onSubmit={handleSubmit}>
+          <div className="modal-body space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div><label className="label text-xs">Prénom *</label>
+                <input className="input" value={form.first_name} onChange={e => set('first_name', e.target.value)} required /></div>
+              <div><label className="label text-xs">Nom *</label>
+                <input className="input" value={form.last_name} onChange={e => set('last_name', e.target.value)} required /></div>
+            </div>
+            {/* SIRET */}
+            <div>
+              <label className="label text-xs">SIRET <span className="text-gray-400 font-normal">(optionnel)</span></label>
+              <div className="flex gap-2">
+                <input className="input flex-1 font-mono text-sm" value={form.siret}
+                  onChange={e => { set('siret', e.target.value); setSiretStatus('idle') }}
+                  placeholder="14 chiffres" maxLength={14} />
+                <button type="button" onClick={doLookup}
+                  disabled={siretStatus === 'loading' || !form.siret.trim()}
+                  className="btn btn-ghost border border-gray-300 px-3 text-sm">
+                  {siretStatus === 'loading' ? '⏳' : '🔍'}
+                </button>
+              </div>
+              {siretStatus === 'ok' && <p className="mt-1 text-xs text-green-600">✅ Entreprise active</p>}
+              {siretStatus === 'inactive' && <p className="mt-1 text-xs text-amber-600">⚠️ Entreprise cessée</p>}
+              {siretStatus === 'error' && <p className="mt-1 text-xs text-red-500">❌ SIRET introuvable</p>}
+            </div>
+            <div>
+              <label className="label text-xs">Entreprise</label>
+              <input className="input" value={form.company_name} onChange={e => set('company_name', e.target.value)} placeholder="MAÇOBAT SARL" />
+            </div>
+            <div>
+              <label className="label text-xs">Métier</label>
+              <input className="input" value={form.trade} onChange={e => set('trade', e.target.value)} placeholder="Maçonnerie, Électricité…" />
+            </div>
+            {err && <p className="text-xs text-red-600">{err}</p>}
+          </div>
+          <div className="modal-footer">
+            <button type="button" onClick={onClose} className="btn btn-ghost btn-sm">Annuler</button>
+            <button type="submit" disabled={saving} className="btn btn-primary btn-sm">
+              {saving ? '⏳' : '＋ Créer'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
 // ─── LotModal ─────────────────────────────────────────────────────────────────
-function LotModal({ lot, mode, users, employees, teams, onClose, onSubmit, t }: any) {
+function LotModal({ lot, mode, users, employees, teams, onClose, onSubmit, onUserCreated, t }: any) {
   // Détecter l'assignation initiale : équipe, salarié ou sous-traitant
   const initialAssignType = lot.team_id ? 'team'
     : lot.subcontractor_id && (employees || []).some((e: any) => e.id === lot.subcontractor_id) ? 'employee'
     : 'subcontractor'
   const [form, setForm] = useState({ ...lot })
+  const [localUsers, setLocalUsers] = useState<any[]>(users || [])
   const [assignType, setAssignType] = useState<'subcontractor' | 'employee' | 'team'>(initialAssignType)
+  const [showNewSub, setShowNewSub] = useState(false)
   const set = (k: string, v: any) => setForm((f: any) => ({ ...f, [k]: v }))
 
   const handleAssignTypeChange = (type: 'subcontractor' | 'employee' | 'team') => {
@@ -1506,10 +1589,33 @@ function LotModal({ lot, mode, users, employees, teams, onClose, onSubmit, t }: 
                 </button>
               </div>
               {assignType === 'subcontractor' ? (
-                <select className="select" value={form.subcontractor_id || ''} onChange={e => set('subcontractor_id', e.target.value)}>
-                  <option value="">{t('common.none')}</option>
-                  {users.map((u: any) => <option key={u.id} value={u.id}>{u.first_name} {u.last_name}{u.company_name ? ` — ${u.company_name}` : ''}</option>)}
-                </select>
+                <>
+                  <select className="select" value={form.subcontractor_id || ''} onChange={e => set('subcontractor_id', e.target.value)}>
+                    <option value="">{t('common.none')}</option>
+                    {localUsers.map((u: any) => (
+                      <option key={u.id} value={u.id}>
+                        {u.first_name} {u.last_name}
+                        {u.trade ? ` (${u.trade})` : ''}
+                        {u.company_name ? ` — ${u.company_name}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                  <button type="button" onClick={() => setShowNewSub(true)}
+                    className="mt-1.5 text-xs text-indigo-600 hover:underline flex items-center gap-1">
+                    ＋ Nouveau sous-traitant
+                  </button>
+                  {showNewSub && (
+                    <NewSubModal
+                      onClose={() => setShowNewSub(false)}
+                      onCreated={(newUser: any) => {
+                        setLocalUsers(prev => [...prev, newUser])
+                        set('subcontractor_id', newUser.id)
+                        onUserCreated?.(newUser)
+                        setShowNewSub(false)
+                      }}
+                    />
+                  )}
+                </>
               ) : assignType === 'employee' ? (
                 <select className="select" value={form.subcontractor_id || ''} onChange={e => set('subcontractor_id', e.target.value)}>
                   <option value="">{t('common.none')}</option>
